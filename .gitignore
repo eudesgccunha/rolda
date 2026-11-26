@@ -6,3 +6,37 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 dist/
+
+# Environment and secrets
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Python tooling
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+*.egg-info/
+build/
+.tox/
+.hypothesis/
+
+# Local data (Compose volumes, dumps, logs)
+*.log
+*.sqlite3
+data/
+
+# Editors and OS
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
+
+# Claude Code local settings
+.claude/settings.local.json
+
+# UI (TypeScript, from v0.2)
+node_modules/
