@@ -32,3 +32,16 @@ Integration test (needs the stack running):
 set -a && . deploy/compose/.env && set +a
 uv run pytest -m integration
 ```
+
+## Running the worker
+
+With the stack up and the variables from `deploy/compose/.env` exported:
+
+```bash
+set -a && . deploy/compose/.env && set +a
+uv run python -m rolda.entrypoints
+```
+
+Optional variables: `ROLDA_CLICKHOUSE_HOST`, `ROLDA_CLICKHOUSE_PORT`,
+`ROLDA_POSTGRES_HOST`, `ROLDA_POSTGRES_PORT`, `ROLDA_WINDOW_SECONDS`
+(default 300) and `ROLDA_INTERVAL_SECONDS` (default 60).

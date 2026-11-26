@@ -1,12 +1,18 @@
 """Worker: turns a time window of spans into incidents."""
 
-from collections.abc import Callable, Sequence
+import asyncio
+import logging
+from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from typing import Protocol
 
 from rolda.detection import Baseline, Rule
+from rolda.entrypoints.settings import Settings
 from rolda.incidents import Incident, IncidentStore
 from rolda.traces import SpanSource, build_traces
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True, slots=True)
@@ -82,3 +88,38 @@ class Worker:
         return WindowResult(
             traces=len(traces), findings=findings, new_incidents=new
         )
+
+
+class WindowRunner(Protocol):
+    """Anything that can process a window."""
+
+    async def run_window(self, start: datetime, end: datetime) -> WindowResult:
+        """Process ``[start, end)``."""
+        ...
+
+
+async def serve(
+    worker: WindowRunner,
+    settings: Settings,
+    clock: Callable[[], datetime] = _utc_now,
+    sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
+    iterations: int | None = None,
+) -> None:
+    """Run contiguous windows forever, or ``iterations`` times."""
+    previous_end: datetime | None = None
+    count = 0
+    while iterations is None or count < iterations:
+        end = clock()
+        start = previous_end or end - settings.window
+        result = await worker.run_window(start, end)
+        logger.info(
+            "window %s..%s traces=%d findings=%d new_incidents=%d",
+            start.isoformat(),
+            end.isoformat(),
+            result.traces,
+            result.findings,
+            result.new_incidents,
+        )
+        previous_end = end
+        count += 1
+        await sleep(settings.interval.total_seconds())
