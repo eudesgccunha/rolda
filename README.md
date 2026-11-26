@@ -46,5 +46,15 @@ Optional variables: `ROLDA_CLICKHOUSE_HOST`, `ROLDA_CLICKHOUSE_PORT`,
 `ROLDA_POSTGRES_HOST`, `ROLDA_POSTGRES_PORT`, `ROLDA_WINDOW_SECONDS`
 (default 300) and `ROLDA_INTERVAL_SECONDS` (default 60).
 
-Alerts are sent for new incidents when `ROLDA_WEBHOOK_URL` (JSON) or
-`ROLDA_SLACK_WEBHOOK_URL` is set. Both must be http or https URLs.
+Alerts are sent for new incidents to every channel whose URL is set. Each
+must be an http or https URL:
+
+| Variable | Channel |
+|---|---|
+| `ROLDA_WEBHOOK_URL` | Generic JSON webhook |
+| `ROLDA_SLACK_WEBHOOK_URL` | Slack incoming webhook |
+| `ROLDA_GOOGLE_CHAT_WEBHOOK_URL` | Google Chat incoming webhook |
+| `ROLDA_TEAMS_WEBHOOK_URL` | Teams Workflows webhook (Adaptive Card) |
+
+Webhook URLs hold secrets. Keep them in the environment, never in the
+repository. Rolda does not log them.

@@ -2,7 +2,13 @@
 
 from datetime import UTC, datetime
 
-from rolda.alerts import Alert, slack_text, webhook_payload
+from rolda.alerts import (
+    Alert,
+    google_chat_text,
+    slack_text,
+    teams_card,
+    webhook_payload,
+)
 from rolda.detection import Confidence
 from rolda.incidents import Incident
 
@@ -61,3 +67,46 @@ def test_long_hypothesis_is_truncated() -> None:
 
     assert len(webhook_payload(_alert(long))["hypothesis"]) <= 500
     assert len(slack_text(_alert(long))) < 800
+
+
+def test_google_chat_text_neutralizes_mentions() -> None:
+    text = google_chat_text(_alert("hi <users/all> and <users/123>"))
+
+    assert "<users/" not in text
+    assert "<" not in text
+    assert ">" not in text
+    assert "users/all" in text
+    assert "span_error" in text
+
+
+def test_teams_card_is_an_adaptive_card_message() -> None:
+    card = teams_card(_alert())
+
+    assert card["type"] == "message"
+    [attachment] = card["attachments"]
+    assert attachment["contentType"] == (
+        "application/vnd.microsoft.card.adaptive"
+    )
+    content = attachment["content"]
+    assert content["type"] == "AdaptiveCard"
+    assert content["version"] == "1.4"
+    texts = [block["text"] for block in content["body"]]
+    assert any("span_error" in text for text in texts)
+    assert any("root > tool" in text for text in texts)
+
+
+def test_teams_card_cannot_build_markdown_links() -> None:
+    card = teams_card(_alert("[click](http://evil.example) `x`"))
+
+    body = card["attachments"][0]["content"]["body"]
+    joined = " ".join(block["text"] for block in body)
+    assert "[" not in joined
+    assert "]" not in joined
+    assert "`" not in joined
+
+
+def test_teams_card_truncates_long_hypothesis() -> None:
+    card = teams_card(_alert("x" * 5000))
+
+    body = card["attachments"][0]["content"]["body"]
+    assert all(len(block["text"]) < 800 for block in body)

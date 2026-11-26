@@ -9,7 +9,9 @@ from urllib.parse import urlsplit
 from rolda.alerts import (
     Alert,
     AlertDeliveryError,
+    google_chat_text,
     slack_text,
+    teams_card,
     webhook_payload,
 )
 
@@ -52,29 +54,46 @@ def _post_json(url: str, payload: dict[str, Any], timeout: float) -> None:
         conn.close()
 
 
-class WebhookAlerter:
+class _HttpAlerter:
+    """Shared transport: validate the URL, POST a JSON body in a thread."""
+
+    def __init__(self, url: str, timeout: float = 5.0) -> None:
+        self._url = _validated(url)
+        self._timeout = timeout
+
+    def _body(self, alert: Alert) -> dict[str, Any]:
+        raise NotImplementedError
+
+    async def send(self, alert: Alert) -> None:
+        """Deliver the alert."""
+        await asyncio.to_thread(
+            _post_json, self._url, self._body(alert), self._timeout
+        )
+
+
+class WebhookAlerter(_HttpAlerter):
     """POST the alert as JSON to a URL."""
 
-    def __init__(self, url: str, timeout: float = 5.0) -> None:
-        self._url = _validated(url)
-        self._timeout = timeout
-
-    async def send(self, alert: Alert) -> None:
-        """Deliver the alert."""
-        await asyncio.to_thread(
-            _post_json, self._url, webhook_payload(alert), self._timeout
-        )
+    def _body(self, alert: Alert) -> dict[str, Any]:
+        return webhook_payload(alert)
 
 
-class SlackAlerter:
+class SlackAlerter(_HttpAlerter):
     """POST the alert to a Slack incoming webhook."""
 
-    def __init__(self, url: str, timeout: float = 5.0) -> None:
-        self._url = _validated(url)
-        self._timeout = timeout
+    def _body(self, alert: Alert) -> dict[str, Any]:
+        return {"text": slack_text(alert)}
 
-    async def send(self, alert: Alert) -> None:
-        """Deliver the alert."""
-        await asyncio.to_thread(
-            _post_json, self._url, {"text": slack_text(alert)}, self._timeout
-        )
+
+class GoogleChatAlerter(_HttpAlerter):
+    """POST the alert to a Google Chat incoming webhook."""
+
+    def _body(self, alert: Alert) -> dict[str, Any]:
+        return {"text": google_chat_text(alert)}
+
+
+class TeamsAlerter(_HttpAlerter):
+    """POST an Adaptive Card to a Teams Workflows webhook."""
+
+    def _body(self, alert: Alert) -> dict[str, Any]:
+        return teams_card(alert)

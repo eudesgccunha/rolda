@@ -117,3 +117,28 @@ def test_webhook_urls_are_optional_and_validated() -> None:
 def test_invalid_webhook_url_is_an_error() -> None:
     with pytest.raises(SettingsError, match="ROLDA_WEBHOOK_URL"):
         load_settings({**ENV, "ROLDA_WEBHOOK_URL": "ftp://x/y"})
+
+
+def test_chat_and_teams_urls_are_optional_and_validated() -> None:
+    assert load_settings(ENV).google_chat_webhook_url is None
+    assert load_settings(ENV).teams_webhook_url is None
+
+    settings = load_settings(
+        {
+            **ENV,
+            "ROLDA_GOOGLE_CHAT_WEBHOOK_URL": "https://chat.example/x",
+            "ROLDA_TEAMS_WEBHOOK_URL": "https://teams.example/y",
+        }
+    )
+
+    assert settings.google_chat_webhook_url == "https://chat.example/x"
+    assert settings.teams_webhook_url == "https://teams.example/y"
+
+
+@pytest.mark.parametrize(
+    "name",
+    ["ROLDA_GOOGLE_CHAT_WEBHOOK_URL", "ROLDA_TEAMS_WEBHOOK_URL"],
+)
+def test_invalid_chat_or_teams_url_is_an_error(name: str) -> None:
+    with pytest.raises(SettingsError, match=name):
+        load_settings({**ENV, name: "file:///etc/passwd"})

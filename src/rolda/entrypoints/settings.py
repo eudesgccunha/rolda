@@ -23,6 +23,8 @@ class Settings:
     interval: timedelta
     webhook_url: str | None = None
     slack_webhook_url: str | None = None
+    google_chat_webhook_url: str | None = None
+    teams_webhook_url: str | None = None
 
 
 def _required(env: Mapping[str, str], name: str) -> str:
@@ -73,4 +75,8 @@ def load_settings(env: Mapping[str, str]) -> Settings:
         interval=timedelta(seconds=_number(env, "ROLDA_INTERVAL_SECONDS", 60)),
         webhook_url=_optional_url(env, "ROLDA_WEBHOOK_URL"),
         slack_webhook_url=_optional_url(env, "ROLDA_SLACK_WEBHOOK_URL"),
+        google_chat_webhook_url=_optional_url(
+            env, "ROLDA_GOOGLE_CHAT_WEBHOOK_URL"
+        ),
+        teams_webhook_url=_optional_url(env, "ROLDA_TEAMS_WEBHOOK_URL"),
     )

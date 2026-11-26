@@ -10,7 +10,12 @@ from typing import Any
 
 import pytest
 
-from rolda.adapters.webhook import SlackAlerter, WebhookAlerter
+from rolda.adapters.webhook import (
+    GoogleChatAlerter,
+    SlackAlerter,
+    TeamsAlerter,
+    WebhookAlerter,
+)
 from rolda.alerts import Alert, AlertDeliveryError
 from rolda.detection import Confidence
 from rolda.incidents import Incident
@@ -81,6 +86,22 @@ def test_slack_receives_text(server: str) -> None:
 
     [received] = _Receiver.received
     assert "span_error" in received["text"]
+
+
+def test_google_chat_receives_text(server: str) -> None:
+    asyncio.run(GoogleChatAlerter(server).send(_alert()))
+
+    [received] = _Receiver.received
+    assert "span_error" in received["text"]
+
+
+def test_teams_receives_an_adaptive_card(server: str) -> None:
+    asyncio.run(TeamsAlerter(server).send(_alert()))
+
+    [received] = _Receiver.received
+    assert received["type"] == "message"
+    content = received["attachments"][0]["content"]
+    assert content["type"] == "AdaptiveCard"
 
 
 def test_http_error_status_raises_delivery_error(server: str) -> None:

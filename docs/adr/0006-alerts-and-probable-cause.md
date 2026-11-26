@@ -14,14 +14,20 @@ appears. Trace content is untrusted and reaches alert channels.
   `agent|rule|operation|normalized error`. The agent is the trace root's
   agent. Error messages lose ids, numbers and `|`, and are cut at 80
   characters, so similar errors share a signature.
-- `Alerter` is a port. Adapters: a generic JSON webhook and a Slack
-  incoming webhook, both on the standard library (`http.client`).
+- `Alerter` is a port. Adapters: a generic JSON webhook, Slack, Google
+  Chat and Microsoft Teams, all on one `http.client` transport.
+- Teams uses a Workflows webhook with an Adaptive Card, because Office 365
+  connector webhooks were retired in May 2026.
 - The worker alerts only when `IncidentStore.save` reports a new incident,
   so reprocessing a window does not resend alerts.
 - A failed delivery is logged and the worker goes on. The alert is not
   retried. Incidents stay in the store, so nothing is lost silently.
-- Slack text escapes `&`, `<` and `>` and cuts the hypothesis at 500
-  characters, so trace content cannot mention a channel or inject links.
+- Each channel neutralizes trace content: Slack escapes `&`, `<` and `>`,
+  Google Chat swaps angle brackets for look-alikes (no escape is
+  documented), and Teams removes `[`, `]` and backticks. The hypothesis
+  is cut at 500 characters.
+- The Google Chat and Teams formats are checked against local servers
+  only, not against the real services.
 - Webhook URLs come from the environment, must be http or https with a
   host, and are optional.
 

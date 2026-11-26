@@ -42,3 +42,63 @@ def slack_text(alert: Alert) -> str:
         f"trace {incident.trace_id}"
     )
     return f"*{head}*\n{_slack_escape(_short(alert.hypothesis))}"
+
+
+def google_chat_text(alert: Alert) -> str:
+    """Return the Google Chat message text.
+
+    Chat has no documented escape for ``<users/all>`` style mentions, so
+    angle brackets become look-alike characters.
+    """
+    incident = alert.incident
+    head = (
+        f"Rolda: {incident.rule} ({incident.confidence.value}) "
+        f"trace {incident.trace_id}"
+    )
+    return _chat_safe(f"*{head}*\n{_short(alert.hypothesis)}")
+
+
+def _chat_safe(text: str) -> str:
+    return text.replace("<", "\u2039").replace(">", "\u203a")
+
+
+def _teams_safe(text: str) -> str:
+    # Adaptive Card text renders markdown: break link and code syntax.
+    return text.replace("[", "(").replace("]", ")").replace("`", "'")
+
+
+def teams_card(alert: Alert) -> dict[str, Any]:
+    """Return a Teams Workflows webhook body with an Adaptive Card."""
+    incident = alert.incident
+    title = (
+        f"Rolda: {incident.rule} ({incident.confidence.value}) "
+        f"trace {incident.trace_id}"
+    )
+    return {
+        "type": "message",
+        "attachments": [
+            {
+                "contentType": "application/vnd.microsoft.card.adaptive",
+                "content": {
+                    "$schema": (
+                        "http://adaptivecards.io/schemas/adaptive-card.json"
+                    ),
+                    "type": "AdaptiveCard",
+                    "version": "1.4",
+                    "body": [
+                        {
+                            "type": "TextBlock",
+                            "text": _teams_safe(title),
+                            "weight": "Bolder",
+                            "wrap": True,
+                        },
+                        {
+                            "type": "TextBlock",
+                            "text": _teams_safe(_short(alert.hypothesis)),
+                            "wrap": True,
+                        },
+                    ],
+                },
+            }
+        ],
+    }
