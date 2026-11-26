@@ -24,6 +24,7 @@ class Finding:
     trace_id: str
     rule: str
     evidence: str
+    summary: str = ""
 
 
 @dataclass(frozen=True, slots=True)

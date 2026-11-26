@@ -8,14 +8,25 @@ from collections.abc import Callable, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 
-from rolda.evals import build_cases, to_line
+from rolda.evals import (
+    EvalCase,
+    EvalFormatError,
+    build_cases,
+    parse_line,
+    to_line,
+)
 from rolda.incidents import (
     Label,
     LabelSource,
     LabelStore,
     UnknownIncidentError,
 )
-from rolda.judge import Verdict
+from rolda.judge import Judge, Verdict
+from rolda.judge.evaluate import (
+    DEFAULT_MIN_CASES,
+    InsufficientCasesError,
+    evaluate_judge,
+)
 from rolda.traces import SpanSource
 
 
@@ -37,7 +48,60 @@ def _parser() -> argparse.ArgumentParser:
     )
     export.add_argument("--out", required=True, type=Path)
     export.add_argument("--force", action="store_true")
+    judge_eval = commands.add_parser(
+        "judge-eval", help="measure judge agreement with human labels"
+    )
+    judge_eval.add_argument("--evals", required=True, type=Path)
+    judge_eval.add_argument("--min-cases", type=int, default=DEFAULT_MIN_CASES)
     return parser
+
+
+class _MissingKeyError(RuntimeError):
+    pass
+
+
+def _default_judge() -> Judge:
+    from rolda.adapters.anthropic_judge import DEFAULT_MODEL, AnthropicJudge
+
+    key = os.environ.get("ANTHROPIC_API_KEY")
+    if not key:
+        msg = "ANTHROPIC_API_KEY is not set"
+        raise _MissingKeyError(msg)
+    return AnthropicJudge(
+        key, model=os.environ.get("ROLDA_JUDGE_MODEL", DEFAULT_MODEL)
+    )
+
+
+def _read_cases(path: Path) -> list[EvalCase]:
+    cases: list[EvalCase] = []
+    lines = path.read_text(encoding="utf-8").splitlines()
+    for number, line in enumerate(lines, start=1):
+        try:
+            cases.append(parse_line(line))
+        except EvalFormatError as exc:
+            msg = f"{path} line {number}: {exc}"
+            raise EvalFormatError(msg) from exc
+    return cases
+
+
+def _judge_eval(args: argparse.Namespace, judge: Judge | None) -> int:
+    try:
+        cases = _read_cases(args.evals)
+        report = asyncio.run(
+            evaluate_judge(
+                judge or _default_judge(), cases, min_cases=args.min_cases
+            )
+        )
+    except (EvalFormatError, InsufficientCasesError, _MissingKeyError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    print(f"kappa: {report.kappa:.3f}")
+    print(f"agreement: {report.agreement:.3f}")
+    print(f"scored: {report.scored}")
+    print(f"uncertain: {report.uncertain}")
+    for (human, machine), count in sorted(report.confusion.items()):
+        print(f"human={human} judge={machine}: {count}")
+    return 0
 
 
 def _default_label_store() -> LabelStore:
@@ -116,12 +180,15 @@ def main(
     *,
     label_store: LabelStore | None = None,
     span_source: SpanSource | None = None,
+    judge: Judge | None = None,
     clock: Callable[[], datetime] = _utc_now,
 ) -> int:
     """Run one command. Return the process exit code."""
     args = _parser().parse_args(argv)
     if args.command == "label":
         return _label(args, label_store, clock)
+    if args.command == "judge-eval":
+        return _judge_eval(args, judge)
     return _export(args, label_store, span_source)
 
 

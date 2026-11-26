@@ -72,3 +72,19 @@ Verdicts: `failure`, `false_alarm`, `uncertain` (not exported). The export
 holds trace behavior only, never prompt or response content. See
 `docs/adr/0007-eval-export.md`. Both commands need `POSTGRES_*` (and
 `CLICKHOUSE_*` for the export) in the environment.
+
+## Measuring the judge
+
+After labeling enough incidents (at least 30), measure how well the judge
+agrees with you:
+
+```bash
+export ANTHROPIC_API_KEY=...   # never commit it
+uv run python -m rolda.entrypoints.cli judge-eval --evals evals.jsonl
+```
+
+It prints Cohen's kappa, agreement, the confusion counts and how many
+answers were `uncertain` (left out of kappa). The model defaults to
+`claude-haiku-5-5`; set `ROLDA_JUDGE_MODEL` to change it. The judge sees
+trace behavior only. See `docs/adr/0008-judge-and-kappa.md`. No kappa value
+is published yet: it needs real human labels.
