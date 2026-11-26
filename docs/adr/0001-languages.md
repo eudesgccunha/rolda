@@ -15,7 +15,7 @@ from v0.2, its own web UI.
 
 ## Consequences
 
-- CI tests Python 3.12 and 3.13. Python 3.11 is dropped.
+- CI tests Python 3.12 only. Python 3.11 is dropped.
 - The UI talks to the core only through the FastAPI HTTP API.
 - The UI lives in its own directory with its own toolchain, so Python
   checks stay unchanged.
