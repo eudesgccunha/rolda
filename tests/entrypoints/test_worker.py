@@ -4,6 +4,9 @@ import asyncio
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 
+import pytest
+
+from rolda.alerts import Alert, AlertDeliveryError
 from rolda.detection import DetectionConfig, default_rules
 from rolda.entrypoints.worker import Worker, WorkerConfig
 from rolda.incidents import InMemoryIncidentStore
@@ -126,3 +129,63 @@ def test_incident_carries_the_probable_cause(
     [incident] = store.all()
     assert incident.path == ("root", "tool")
     assert incident.signature == "agent-a|span_error|tool|boom"
+
+
+class _RecordingAlerter:
+    def __init__(self, fail: bool = False) -> None:
+        self.alerts: list[Alert] = []
+        self._fail = fail
+
+    async def send(self, alert: Alert) -> None:
+        self.alerts.append(alert)
+        if self._fail:
+            msg = "down"
+            raise AlertDeliveryError(msg)
+
+
+def _alerting_worker(
+    spans: list[Span],
+    store: InMemoryIncidentStore,
+    alerters: list[_RecordingAlerter],
+) -> Worker:
+    return Worker(
+        source=InMemorySpanSource(spans),
+        store=store,
+        rules=default_rules(DetectionConfig()),
+        config=WorkerConfig(lag=timedelta(minutes=2)),
+        clock=lambda: NOW,
+        alerters=alerters,
+    )
+
+
+def test_new_incident_is_alerted_once_even_when_reprocessed(
+    make_span: SpanFactory,
+) -> None:
+    alerter = _RecordingAlerter()
+    worker = _alerting_worker(
+        _failing_trace(make_span), InMemoryIncidentStore(), [alerter]
+    )
+
+    asyncio.run(worker.run_window(T0, T0 + WINDOW))
+    asyncio.run(worker.run_window(T0, T0 + WINDOW))
+
+    assert len(alerter.alerts) == 1
+    assert "root > tool" in alerter.alerts[0].hypothesis
+
+
+def test_failed_alert_is_logged_and_does_not_stop_the_worker(
+    make_span: SpanFactory, caplog: pytest.LogCaptureFixture
+) -> None:
+    broken = _RecordingAlerter(fail=True)
+    healthy = _RecordingAlerter()
+    store = InMemoryIncidentStore()
+    worker = _alerting_worker(
+        _failing_trace(make_span), store, [broken, healthy]
+    )
+
+    result = asyncio.run(worker.run_window(T0, T0 + WINDOW))
+
+    assert result.new_incidents == 1
+    assert len(store.all()) == 1
+    assert len(healthy.alerts) == 1
+    assert "alert delivery failed" in caplog.text

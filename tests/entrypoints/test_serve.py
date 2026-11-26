@@ -96,3 +96,24 @@ def test_serve_runs_contiguous_windows() -> None:
     ):
         assert start == end
     assert sleeps == [60.0, 60.0, 60.0]
+
+
+def test_webhook_urls_are_optional_and_validated() -> None:
+    assert load_settings(ENV).webhook_url is None
+    assert load_settings(ENV).slack_webhook_url is None
+
+    settings = load_settings(
+        {
+            **ENV,
+            "ROLDA_WEBHOOK_URL": "https://hooks.example.com/a",
+            "ROLDA_SLACK_WEBHOOK_URL": "https://hooks.slack.com/b",
+        }
+    )
+
+    assert settings.webhook_url == "https://hooks.example.com/a"
+    assert settings.slack_webhook_url == "https://hooks.slack.com/b"
+
+
+def test_invalid_webhook_url_is_an_error() -> None:
+    with pytest.raises(SettingsError, match="ROLDA_WEBHOOK_URL"):
+        load_settings({**ENV, "ROLDA_WEBHOOK_URL": "ftp://x/y"})

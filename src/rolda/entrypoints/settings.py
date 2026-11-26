@@ -3,7 +3,7 @@
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import timedelta
-from urllib.parse import quote
+from urllib.parse import quote, urlsplit
 
 
 class SettingsError(ValueError):
@@ -21,6 +21,8 @@ class Settings:
     postgres_dsn: str
     window: timedelta
     interval: timedelta
+    webhook_url: str | None = None
+    slack_webhook_url: str | None = None
 
 
 def _required(env: Mapping[str, str], name: str) -> str:
@@ -42,6 +44,17 @@ def _number(env: Mapping[str, str], name: str, default: int) -> int:
         raise SettingsError(msg) from exc
 
 
+def _optional_url(env: Mapping[str, str], name: str) -> str | None:
+    value = env.get(name)
+    if not value:
+        return None
+    parts = urlsplit(value)
+    if parts.scheme not in ("http", "https") or not parts.hostname:
+        msg = f"{name} must be an http or https URL with a host"
+        raise SettingsError(msg)
+    return value
+
+
 def load_settings(env: Mapping[str, str]) -> Settings:
     """Build settings from environment variables."""
     pg_user = quote(_required(env, "POSTGRES_USER"), safe="")
@@ -58,4 +71,6 @@ def load_settings(env: Mapping[str, str]) -> Settings:
         ),
         window=timedelta(seconds=_number(env, "ROLDA_WINDOW_SECONDS", 300)),
         interval=timedelta(seconds=_number(env, "ROLDA_INTERVAL_SECONDS", 60)),
+        webhook_url=_optional_url(env, "ROLDA_WEBHOOK_URL"),
+        slack_webhook_url=_optional_url(env, "ROLDA_SLACK_WEBHOOK_URL"),
     )

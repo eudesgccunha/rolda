@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Protocol
 
+from rolda.alerts import Alert, AlertDeliveryError, Alerter
 from rolda.detection import Baseline, Rule
 from rolda.entrypoints.settings import Settings
 from rolda.incidents import (
@@ -54,12 +55,14 @@ class Worker:
         rules: Sequence[Rule],
         config: WorkerConfig,
         clock: Callable[[], datetime] = _utc_now,
+        alerters: Sequence[Alerter] = (),
     ) -> None:
         self._source = source
         self._store = store
         self._rules = rules
         self._config = config
         self._clock = clock
+        self._alerters = alerters
 
     async def run_window(self, start: datetime, end: datetime) -> WindowResult:
         """Process ``[start, end)`` plus the lag before it.
@@ -77,20 +80,22 @@ class Worker:
         findings = 0
         new = 0
         for trace in traces:
-            for incident in self._incidents_for(trace, baseline):
+            for incident, hypothesis in self._incidents_for(trace, baseline):
                 findings += 1
-                new += await self._store.save(incident)
+                if await self._store.save(incident):
+                    new += 1
+                    await self._notify(Alert(incident, hypothesis))
         return WindowResult(
             traces=len(traces), findings=findings, new_incidents=new
         )
 
     def _incidents_for(
         self, trace: Trace, baseline: Baseline
-    ) -> Iterator[Incident]:
+    ) -> Iterator[tuple[Incident, str]]:
         for rule in self._rules:
             for finding in rule.evaluate(trace, baseline):
                 cause = probable_cause(trace, finding)
-                yield Incident(
+                incident = Incident(
                     trace_id=finding.trace_id,
                     rule=finding.rule,
                     span_id=finding.span_id,
@@ -99,6 +104,17 @@ class Worker:
                     signature=cause.signature,
                     path=cause.path,
                     detected_at=self._clock(),
+                )
+                yield incident, cause.hypothesis
+
+    async def _notify(self, alert: Alert) -> None:
+        for alerter in self._alerters:
+            try:
+                await alerter.send(alert)
+            except AlertDeliveryError:
+                logger.exception(
+                    "alert delivery failed for trace %s",
+                    alert.incident.trace_id,
                 )
 
 

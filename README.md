@@ -45,3 +45,6 @@ uv run python -m rolda.entrypoints
 Optional variables: `ROLDA_CLICKHOUSE_HOST`, `ROLDA_CLICKHOUSE_PORT`,
 `ROLDA_POSTGRES_HOST`, `ROLDA_POSTGRES_PORT`, `ROLDA_WINDOW_SECONDS`
 (default 300) and `ROLDA_INTERVAL_SECONDS` (default 60).
+
+Alerts are sent for new incidents when `ROLDA_WEBHOOK_URL` (JSON) or
+`ROLDA_SLACK_WEBHOOK_URL` is set. Both must be http or https URLs.
