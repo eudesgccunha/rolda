@@ -26,10 +26,13 @@ class WorkerConfig:
 
     ``lag`` re-reads the end of the previous window to catch late spans.
     ``baseline_span`` is the history used by the outlier rules.
+    ``baseline_refresh`` is how long a built baseline is reused before the
+    history is read again.
     """
 
     lag: timedelta = timedelta(minutes=2)
     baseline_span: timedelta = timedelta(days=7)
+    baseline_refresh: timedelta = timedelta(hours=1)
 
 
 @dataclass(frozen=True, slots=True)
@@ -63,6 +66,8 @@ class Worker:
         self._config = config
         self._clock = clock
         self._alerters = alerters
+        self._baseline: Baseline | None = None
+        self._baseline_start: datetime | None = None
 
     async def run_window(self, start: datetime, end: datetime) -> WindowResult:
         """Process ``[start, end)`` plus the lag before it.
@@ -72,10 +77,7 @@ class Worker:
         """
         lag = self._config.lag
         spans = await self._source.spans_between(start - lag, end)
-        history = await self._source.spans_between(
-            start - self._config.baseline_span, start - lag
-        )
-        baseline = Baseline.from_traces(build_traces(history))
+        baseline = await self._baseline_for(start)
         traces = build_traces(spans)
         findings = 0
         new = 0
@@ -88,6 +90,25 @@ class Worker:
         return WindowResult(
             traces=len(traces), findings=findings, new_incidents=new
         )
+
+    async def _baseline_for(self, start: datetime) -> Baseline:
+        """Return the cached baseline, rebuilding it when it is stale."""
+        cached = self._baseline
+        built_at = self._baseline_start
+        if (
+            cached is not None
+            and built_at is not None
+            and timedelta(0)
+            <= start - built_at
+            < self._config.baseline_refresh
+        ):
+            return cached
+        history = await self._source.spans_between(
+            start - self._config.baseline_span, start - self._config.lag
+        )
+        self._baseline = Baseline.from_traces(build_traces(history))
+        self._baseline_start = start
+        return self._baseline
 
     def _incidents_for(
         self, trace: Trace, baseline: Baseline

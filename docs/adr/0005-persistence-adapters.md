@@ -22,8 +22,10 @@ Compose stack. SPEC.md plans ClickHouse for spans and PostgreSQL for state.
 
 ## Consequences
 
-- Each window reads the 7-day baseline again. This costs more as data
-  grows, so cache or pre-aggregate it once volumes are measured.
+- The worker caches the 7-day baseline in memory and rebuilds it every
+  `WorkerConfig.baseline_refresh` (default 1 hour), measured on window
+  start times. A restart rebuilds it. The baseline can lag by up to that
+  interval; pre-aggregate it once volumes are measured.
 - `Worker` opens one PostgreSQL connection per saved incident. Use a pool
   if incident volume grows.
 - No Dockerfile yet: the worker runs with `uv run python -m

@@ -189,3 +189,52 @@ def test_failed_alert_is_logged_and_does_not_stop_the_worker(
     assert len(store.all()) == 1
     assert len(healthy.alerts) == 1
     assert "alert delivery failed" in caplog.text
+
+
+class _CountingSource(InMemorySpanSource):
+    """Span source that counts how often the baseline history is read."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.history_reads = 0
+
+    async def spans_between(
+        self, start: datetime, end: datetime
+    ) -> list[Span]:
+        if end - start > timedelta(days=1):
+            self.history_reads += 1
+        return list(await super().spans_between(start, end))
+
+
+def _counting_worker(refresh: timedelta) -> tuple[Worker, _CountingSource]:
+    source = _CountingSource()
+    worker = Worker(
+        source=source,
+        store=InMemoryIncidentStore(),
+        rules=default_rules(DetectionConfig()),
+        config=WorkerConfig(baseline_refresh=refresh),
+        clock=lambda: NOW,
+    )
+    return worker, source
+
+
+def test_baseline_is_reused_inside_the_refresh_interval() -> None:
+    worker, source = _counting_worker(timedelta(hours=1))
+
+    asyncio.run(worker.run_window(T0, T0 + WINDOW))
+    asyncio.run(worker.run_window(T0 + WINDOW, T0 + 2 * WINDOW))
+
+    assert source.history_reads == 1
+
+
+def test_baseline_is_rebuilt_after_the_refresh_interval() -> None:
+    worker, source = _counting_worker(timedelta(hours=1))
+
+    asyncio.run(worker.run_window(T0, T0 + WINDOW))
+    asyncio.run(
+        worker.run_window(
+            T0 + timedelta(hours=2), T0 + timedelta(hours=2, minutes=5)
+        )
+    )
+
+    assert source.history_reads == 2
