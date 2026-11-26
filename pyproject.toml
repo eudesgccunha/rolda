@@ -59,7 +59,10 @@ files = ["src", "tests"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "--strict-markers --strict-config"
+addopts = "--strict-markers --strict-config -m 'not integration'"
+markers = [
+    "integration: needs the Compose stack running (deploy/compose)",
+]
 
 [tool.bandit]
 exclude_dirs = ["tests"]
