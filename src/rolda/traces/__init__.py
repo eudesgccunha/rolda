@@ -1,5 +1,6 @@
 """Traces: domain model, ports and OpenTelemetry normalization."""
 
+from rolda.traces.memory import InMemorySpanSource
 from rolda.traces.model import (
     Operation,
     Span,
@@ -11,6 +12,7 @@ from rolda.traces.normalize import NormalizationError, normalize_span
 from rolda.traces.ports import SpanSource
 
 __all__ = [
+    "InMemorySpanSource",
     "NormalizationError",
     "Operation",
     "Span",
