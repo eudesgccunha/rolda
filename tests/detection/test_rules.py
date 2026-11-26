@@ -209,12 +209,13 @@ def test_outlier_rules_ignore_zero_mad(make_span: SpanFactory) -> None:
     assert result == ()
 
 
-def test_default_rules_lists_the_four_rules() -> None:
+def test_default_rules_lists_the_rules() -> None:
     names = [rule.name for rule in default_rules(DetectionConfig())]
 
     assert names == [
         "span_error",
         "tool_loop",
         "latency_outlier",
+        "span_latency_outlier",
         "token_outlier",
     ]

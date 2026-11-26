@@ -210,6 +210,7 @@ class Outcome:
     fault: str
     tool_calls: int
     failed: bool
+    trace_id: str
 
 
 def build_session(rng: Random) -> Session:
@@ -262,6 +263,7 @@ class SupportAgent:
         calls = 0
         failed = False
         context = rng.randint(400, 700)
+        trace_id = ""
         with self._tracer.start_as_current_span(
             f"invoke_agent {SERVICE_NAME}",
             kind=trace.SpanKind.CLIENT,
@@ -271,7 +273,8 @@ class SupportAgent:
                 "gen_ai.request.model": MODEL,
                 "support.intent": session.intent,
             },
-        ):
+        ) as root:
+            trace_id = f"{root.get_span_context().trace_id:032x}"
             for index, (tool, args) in enumerate(steps):
                 self._chat(context, 40, session.fault, index == faulty_chat)
                 context += 120
@@ -287,7 +290,7 @@ class SupportAgent:
             reply = 90 if failed else 140
             last = len(steps) == faulty_chat
             self._chat(context, reply, session.fault, last)
-        return Outcome(session.fault, calls, failed)
+        return Outcome(session.fault, calls, failed, trace_id)
 
     def _chat(
         self, context: int, output: int, fault: str, faulty: bool

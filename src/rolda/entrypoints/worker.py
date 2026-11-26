@@ -8,7 +8,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Protocol
 
 from rolda.alerts import Alert, AlertDeliveryError, Alerter
-from rolda.detection import Baseline, Rule
+from rolda.detection import Baseline, Rule, suppress_redundant
 from rolda.entrypoints.settings import Settings
 from rolda.incidents import (
     Incident,
@@ -113,20 +113,26 @@ class Worker:
     def _incidents_for(
         self, trace: Trace, baseline: Baseline
     ) -> Iterator[tuple[Incident, str]]:
-        for rule in self._rules:
-            for finding in rule.evaluate(trace, baseline):
-                cause = probable_cause(trace, finding)
-                incident = Incident(
-                    trace_id=finding.trace_id,
-                    rule=finding.rule,
-                    span_id=finding.span_id,
-                    evidence=finding.evidence,
-                    confidence=finding.confidence,
-                    signature=cause.signature,
-                    path=cause.path,
-                    detected_at=self._clock(),
-                )
-                yield incident, cause.hypothesis
+        findings = suppress_redundant(
+            [
+                finding
+                for rule in self._rules
+                for finding in rule.evaluate(trace, baseline)
+            ]
+        )
+        for finding in findings:
+            cause = probable_cause(trace, finding)
+            incident = Incident(
+                trace_id=finding.trace_id,
+                rule=finding.rule,
+                span_id=finding.span_id,
+                evidence=finding.evidence,
+                confidence=finding.confidence,
+                signature=cause.signature,
+                path=cause.path,
+                detected_at=self._clock(),
+            )
+            yield incident, cause.hypothesis
 
     async def _notify(self, alert: Alert) -> None:
         for alerter in self._alerters:

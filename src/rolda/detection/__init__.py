@@ -7,10 +7,12 @@ from rolda.detection.rules import (
     LatencyOutlier,
     Rule,
     SpanError,
+    SpanLatencyOutlier,
     TokenOutlier,
     ToolLoop,
     default_rules,
 )
+from rolda.detection.suppress import suppress_redundant
 
 __all__ = [
     "Baseline",
@@ -20,7 +22,9 @@ __all__ = [
     "LatencyOutlier",
     "Rule",
     "SpanError",
+    "SpanLatencyOutlier",
     "TokenOutlier",
     "ToolLoop",
     "default_rules",
+    "suppress_redundant",
 ]

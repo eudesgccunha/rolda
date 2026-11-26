@@ -1,12 +1,15 @@
 """Deterministic detection rules (vela)."""
 
+import math
 from collections import Counter
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Protocol
 
 from rolda.detection.baseline import (
+    TIMED_OPERATIONS,
     Baseline,
+    span_key,
     trace_duration_ns,
     trace_tokens,
 )
@@ -170,11 +173,64 @@ class TokenOutlier:
         )
 
 
+def _log(value: float) -> float:
+    return math.log(max(value, 1.0))
+
+
+class SpanLatencyOutlier:
+    """Flag the model or tool call that was much slower than usual.
+
+    Each span is compared with spans of the same agent, kind and name.
+    Durations are skewed to the right, so the score uses their logarithm.
+    """
+
+    name = "span_latency_outlier"
+
+    def __init__(self, config: DetectionConfig) -> None:
+        self._config = config
+
+    def evaluate(self, trace: Trace, baseline: Baseline) -> Sequence[Finding]:
+        """Report the slowest outlying span of the trace, if any."""
+        agent = trace.root.agent
+        if agent is None:
+            return ()
+        worst: tuple[float, Span] | None = None
+        for span in trace.spans:
+            if span.operation not in TIMED_OPERATIONS:
+                continue
+            history = baseline.span_durations.get(span_key(agent, span), ())
+            if len(history) < self._config.min_samples:
+                continue
+            score = robust_z(
+                _log(float(span.duration_ns)), [_log(h) for h in history]
+            )
+            if score is None or score <= self._config.z_threshold:
+                continue
+            if worst is None or score > worst[0]:
+                worst = (score, span)
+        if worst is None:
+            return ()
+        score, span = worst
+        return (
+            Finding(
+                trace_id=trace.trace_id,
+                rule=self.name,
+                span_id=span.span_id,
+                evidence=(
+                    f"span '{span.name}' took "
+                    f"{span.duration_ns / 1_000_000:.0f} ms, "
+                    f"robust z-score {score:.1f} (log scale)"
+                ),
+            ),
+        )
+
+
 def default_rules(config: DetectionConfig) -> list[Rule]:
     """Return the MVP rules in a fixed order."""
     return [
         SpanError(),
         ToolLoop(config),
         LatencyOutlier(config),
+        SpanLatencyOutlier(config),
         TokenOutlier(config),
     ]

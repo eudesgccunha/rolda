@@ -1,9 +1,11 @@
 """Send simulated support-agent sessions to an OTLP/HTTP collector."""
 
 import argparse
+import json
 import time
 from collections import Counter
 from datetime import UTC, datetime
+from pathlib import Path
 from random import Random
 
 from agent import SupportAgent, build_session, setup_tracing
@@ -18,6 +20,11 @@ def main() -> None:
     parser.add_argument("--endpoint", default=DEFAULT_ENDPOINT)
     parser.add_argument("--min-gap", type=float, default=0.2)
     parser.add_argument("--max-gap", type=float, default=1.5)
+    parser.add_argument(
+        "--truth",
+        type=Path,
+        help="write one JSON line per session: trace_id and fault kind",
+    )
     args = parser.parse_args()
 
     rng = Random(args.seed)  # noqa: S311 - seeded simulation, not crypto
@@ -26,12 +33,16 @@ def main() -> None:
     kinds: Counter[str] = Counter()
     failed_sessions = 0
     tool_calls = 0
+    truth: list[str] = []
     started = datetime.now(UTC)
     print(f"start {started:%Y-%m-%d %H:%M:%S}Z sessions={args.sessions}")
 
     for number in range(1, args.sessions + 1):
         outcome = agent.handle(build_session(rng))
         kinds[outcome.fault] += 1
+        truth.append(
+            json.dumps({"trace_id": outcome.trace_id, "fault": outcome.fault})
+        )
         tool_calls += outcome.tool_calls
         failed_sessions += outcome.failed
         if number % 25 == 0:
@@ -42,6 +53,8 @@ def main() -> None:
     provider.shutdown()
     ended = datetime.now(UTC)
 
+    if args.truth:
+        args.truth.write_text("\n".join(truth) + "\n", encoding="utf-8")
     print(f"end   {ended:%Y-%m-%d %H:%M:%S}Z")
     print("fault kinds injected:")
     for kind, count in sorted(kinds.items()):
