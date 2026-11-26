@@ -15,4 +15,6 @@ class Incident:
     span_id: str
     evidence: str
     confidence: Confidence
+    signature: str
+    path: tuple[str, ...]
     detected_at: datetime

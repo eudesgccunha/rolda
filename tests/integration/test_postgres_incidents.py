@@ -35,14 +35,17 @@ def _incident(trace_id: str, rule: str = "span_error") -> Incident:
         span_id="s1",
         evidence=HOSTILE_EVIDENCE,
         confidence=Confidence.LOW,
+        signature="a|span_error|tool|boom",
+        path=("root", "tool"),
         detected_at=datetime(2026, 11, 26, 10, tzinfo=UTC),
     )
 
 
-def _rows(trace_id: str) -> list[tuple[str, str, str]]:
+def _rows(trace_id: str) -> list[tuple[str, str, str, str, list[str]]]:
     with psycopg.connect(_dsn()) as conn:
         cur = conn.execute(
-            "SELECT rule, evidence, confidence FROM incidents "
+            "SELECT rule, evidence, confidence, signature, path "
+            "FROM incidents "
             "WHERE trace_id = %s",
             (trace_id,),
         )
@@ -57,7 +60,15 @@ def test_save_twice_stores_one_row() -> None:
     again = asyncio.run(store.save(_incident(trace_id)))
 
     assert (first, again) == (True, False)
-    assert _rows(trace_id) == [("span_error", HOSTILE_EVIDENCE, "low")]
+    assert _rows(trace_id) == [
+        (
+            "span_error",
+            HOSTILE_EVIDENCE,
+            "low",
+            "a|span_error|tool|boom",
+            ["root", "tool"],
+        )
+    ]
 
 
 def test_other_rule_on_same_trace_is_a_new_incident() -> None:

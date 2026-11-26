@@ -14,6 +14,8 @@ def _incident(rule: str = "span_error", span_id: str = "s1") -> Incident:
         span_id=span_id,
         evidence="boom",
         confidence=Confidence.HIGH,
+        signature="a|span_error|tool|boom",
+        path=("root", "tool"),
         detected_at=datetime(2026, 11, 26, tzinfo=UTC),
     )
 

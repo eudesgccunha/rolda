@@ -6,8 +6,9 @@ from rolda.incidents import Incident
 
 _INSERT = """
 INSERT INTO incidents
-    (trace_id, rule, span_id, evidence, confidence, detected_at)
-VALUES (%s, %s, %s, %s, %s, %s)
+    (trace_id, rule, span_id, evidence, confidence, signature, path,
+     detected_at)
+VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
 ON CONFLICT (trace_id, rule) DO NOTHING
 """
 
@@ -29,6 +30,8 @@ class PostgresIncidentStore:
                     incident.span_id,
                     incident.evidence,
                     incident.confidence.value,
+                    incident.signature,
+                    list(incident.path),
                     incident.detected_at,
                 ),
             )

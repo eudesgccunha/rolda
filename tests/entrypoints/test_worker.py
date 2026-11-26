@@ -113,3 +113,16 @@ def test_healthy_window_creates_no_incident(
 
     assert result.traces == 1
     assert result.new_incidents == 0
+
+
+def test_incident_carries_the_probable_cause(
+    make_span: SpanFactory,
+) -> None:
+    store = InMemoryIncidentStore()
+    worker = _worker(_failing_trace(make_span), store)
+
+    asyncio.run(worker.run_window(T0, T0 + WINDOW))
+
+    [incident] = store.all()
+    assert incident.path == ("root", "tool")
+    assert incident.signature == "agent-a|span_error|tool|boom"

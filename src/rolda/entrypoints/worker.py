@@ -2,15 +2,19 @@
 
 import asyncio
 import logging
-from collections.abc import Awaitable, Callable, Sequence
+from collections.abc import Awaitable, Callable, Iterator, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Protocol
 
 from rolda.detection import Baseline, Rule
 from rolda.entrypoints.settings import Settings
-from rolda.incidents import Incident, IncidentStore
-from rolda.traces import SpanSource, build_traces
+from rolda.incidents import (
+    Incident,
+    IncidentStore,
+    probable_cause,
+)
+from rolda.traces import SpanSource, Trace, build_traces
 
 logger = logging.getLogger(__name__)
 
@@ -73,21 +77,29 @@ class Worker:
         findings = 0
         new = 0
         for trace in traces:
-            for rule in self._rules:
-                for finding in rule.evaluate(trace, baseline):
-                    findings += 1
-                    incident = Incident(
-                        trace_id=finding.trace_id,
-                        rule=finding.rule,
-                        span_id=finding.span_id,
-                        evidence=finding.evidence,
-                        confidence=finding.confidence,
-                        detected_at=self._clock(),
-                    )
-                    new += await self._store.save(incident)
+            for incident in self._incidents_for(trace, baseline):
+                findings += 1
+                new += await self._store.save(incident)
         return WindowResult(
             traces=len(traces), findings=findings, new_incidents=new
         )
+
+    def _incidents_for(
+        self, trace: Trace, baseline: Baseline
+    ) -> Iterator[Incident]:
+        for rule in self._rules:
+            for finding in rule.evaluate(trace, baseline):
+                cause = probable_cause(trace, finding)
+                yield Incident(
+                    trace_id=finding.trace_id,
+                    rule=finding.rule,
+                    span_id=finding.span_id,
+                    evidence=finding.evidence,
+                    confidence=finding.confidence,
+                    signature=cause.signature,
+                    path=cause.path,
+                    detected_at=self._clock(),
+                )
 
 
 class WindowRunner(Protocol):
