@@ -21,3 +21,7 @@ class InMemorySpanSource:
     ) -> Sequence[Span]:
         """Return spans that started in ``[start, end)``."""
         return [s for s in self._spans if start <= s.started_at < end]
+
+    async def spans_for_trace(self, trace_id: str) -> Sequence[Span]:
+        """Return every span of one trace."""
+        return [s for s in self._spans if s.trace_id == trace_id]

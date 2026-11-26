@@ -23,6 +23,15 @@ WHERE Timestamp >= {start:DateTime64(9)}
 ORDER BY Timestamp
 """
 
+_TRACE_QUERY = """
+SELECT Timestamp, TraceId, SpanId, ParentSpanId, SpanName, SpanKind,
+       ServiceName, ResourceAttributes, SpanAttributes, Duration,
+       StatusCode, StatusMessage
+FROM otel_traces
+WHERE TraceId = {trace_id:String}
+ORDER BY Timestamp
+"""
+
 
 def rows_to_spans(
     rows: Iterable[Mapping[str, Any]],
@@ -49,7 +58,7 @@ class ClickHouseSpanSource:
         self._settings = settings
         self.skipped_rows = 0
 
-    def _query(self, start: datetime, end: datetime) -> Sequence[Span]:
+    def _run(self, sql: str, parameters: dict[str, Any]) -> Sequence[Span]:
         client = clickhouse_connect.get_client(
             host=self._settings.clickhouse_host,
             port=self._settings.clickhouse_port,
@@ -58,13 +67,7 @@ class ClickHouseSpanSource:
             database="rolda",
         )
         try:
-            result = client.query(
-                _QUERY,
-                parameters={
-                    "start": _naive_utc(start),
-                    "end": _naive_utc(end),
-                },
-            )
+            result = client.query(sql, parameters=parameters)
             spans, skipped = rows_to_spans(result.named_results())
         finally:
             client.close()
@@ -77,4 +80,11 @@ class ClickHouseSpanSource:
         self, start: datetime, end: datetime
     ) -> Sequence[Span]:
         """Return spans that started in ``[start, end)``."""
-        return await asyncio.to_thread(self._query, start, end)
+        parameters = {"start": _naive_utc(start), "end": _naive_utc(end)}
+        return await asyncio.to_thread(self._run, _QUERY, parameters)
+
+    async def spans_for_trace(self, trace_id: str) -> Sequence[Span]:
+        """Return every span of one trace."""
+        return await asyncio.to_thread(
+            self._run, _TRACE_QUERY, {"trace_id": trace_id}
+        )

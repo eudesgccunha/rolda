@@ -58,3 +58,17 @@ must be an http or https URL:
 
 Webhook URLs hold secrets. Keep them in the environment, never in the
 repository. Rolda does not log them.
+
+## Labeling and evals
+
+Label an incident, then export the labeled set as a regression file:
+
+```bash
+uv run python -m rolda.entrypoints.cli label <trace_id> <rule> failure --reason "real outage"
+uv run python -m rolda.entrypoints.cli export-evals --out evals.jsonl
+```
+
+Verdicts: `failure`, `false_alarm`, `uncertain` (not exported). The export
+holds trace behavior only, never prompt or response content. See
+`docs/adr/0007-eval-export.md`. Both commands need `POSTGRES_*` (and
+`CLICKHOUSE_*` for the export) in the environment.

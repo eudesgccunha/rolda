@@ -15,3 +15,7 @@ class SpanSource(Protocol):
     ) -> Sequence[Span]:
         """Return spans that started in the half-open window."""
         ...
+
+    async def spans_for_trace(self, trace_id: str) -> Sequence[Span]:
+        """Return every span of one trace."""
+        ...
