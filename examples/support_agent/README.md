@@ -33,3 +33,17 @@ uv run --no-project \
 Options: `--sessions` (default 300), `--seed`, `--endpoint`, `--min-gap`,
 `--max-gap`. Sessions are spaced by random gaps, so 300 sessions take
 several minutes. A summary of the injected faults prints at the end.
+
+## Ground truth and scoring
+
+`run.py --truth FILE` writes one JSON line per session with its trace id and
+the injected fault. Three helper scripts use it. They read the databases
+through the same environment variables as the worker:
+
+- `score.py TRUTH.jsonl`: how many injected faults each rule detected, and
+  how many healthy sessions were flagged.
+- `sweep.py TRUTH.jsonl START_ISO`: replays the rules on recorded spans at
+  several z-score thresholds. It writes nothing and sends no alerts.
+- `label_from_truth.py TRUTH.jsonl`: labels incidents from the truth. These
+  are **not** human labels: use them to test the plumbing, not to measure
+  the judge.

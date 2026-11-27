@@ -1,149 +1,155 @@
-# Rolda: especificação do MVP (v0.1)
+# Rolda: MVP specification (v0.1)
 
-## 1. Objetivo
+> English translation of [SPEC.pt-BR.md](SPEC.pt-BR.md), the original plan.
+> What was built, what was verified and where the plan changed is in
+> [STATUS.md](STATUS.md).
 
-Receber traces de qualquer agente via OpenTelemetry (OTLP), detectar
-falhas, alertar, apontar a causa provável e transformar falhas confirmadas
-em casos de avaliação (evals).
+## 1. Goal
 
-Referências de produto: LiteLLM Lens (análise de traces) e Moyai
-(monitoramento de agentes em produção).
+Receive traces from any agent through OpenTelemetry (OTLP), detect
+failures, alert, point at the probable cause and turn confirmed failures
+into evaluation cases (evals).
 
-## 2. Escopo
+Product references: LiteLLM Lens (trace analysis) and Moyai (monitoring
+agents in production).
 
-| No MVP | Fora do MVP |
+## 2. Scope
+
+| In the MVP | Out of the MVP |
 |---|---|
-| Ingestão OTLP (gRPC e HTTP) | Interface web própria |
-| Consulta de traces via API | SDK de instrumentação próprio |
-| Detecção por regras e estatística | Bloqueio de ações em tempo real |
-| Alertas por webhook e Slack | Multi-tenant, SSO e RBAC |
-| Causa provável por incidente | Importação de Langfuse ou LangSmith |
-| Juiz LLM configurável (opcional) | Helm chart (próxima fase) |
-| Exportação de evals em JSONL | Serviços gerenciados em nuvem |
+| OTLP ingestion (gRPC and HTTP) | Own web interface |
+| Trace queries through an API | Own instrumentation SDK |
+| Detection by rules and statistics | Blocking actions in real time |
+| Alerts by webhook and Slack | Multi-tenant, SSO and RBAC |
+| Probable cause per incident | Import from Langfuse or LangSmith |
+| Configurable LLM judge (optional) | Helm chart (next phase) |
+| Eval export as JSONL | Managed cloud services |
 
-## 3. Arquitetura
+## 3. Architecture
 
 ```mermaid
 flowchart TD
-    A[Agentes em produção] -->|OTLP| C[OpenTelemetry Collector]
+    A[Agents in production] -->|OTLP| C[OpenTelemetry Collector]
     C --> CH[(ClickHouse: spans)]
-    CH --> W[worker: normalização]
-    W --> V[vela: regras e anomalias]
-    V -->|casos suspeitos| J[sobrerrolda: juiz]
-    J --> PG[(PostgreSQL: incidentes e rótulos)]
-    PG --> N[Webhook e Slack]
-    PG --> API[API FastAPI]
+    CH --> W[worker: normalization]
+    W --> V[vela: rules and anomalies]
+    V -->|suspicious cases| J[sobrerrolda: judge]
+    J --> PG[(PostgreSQL: incidents and labels)]
+    PG --> N[Webhook and Slack]
+    PG --> API[FastAPI API]
     CH --> API
-    API --> E[Evals em JSONL]
+    API --> E[Evals as JSONL]
 ```
 
-### Decisões e motivos
+The stage names are Portuguese: `vela` is the detection stage, and
+`sobrerrolda` is the judge, a second reviewer that is called only when the
+rules see something odd.
 
-| Decisão | Motivo | Custo |
+### Decisions and reasons
+
+| Decision | Reason | Cost |
 |---|---|---|
-| Collector padrão na entrada | Não criar protocolo próprio | Mais um serviço |
-| ClickHouse para spans | Consultas analíticas em volume | Operação e schema |
-| PostgreSQL para estado | Atualizações e transações | Segundo banco |
-| Um código, dois processos | `api` e `worker` simples | Escala conjunta |
-| Portas e adaptadores | Trocar juiz, banco e alerta | Mais interfaces |
-| Sem LiteLLM como dependência | Menor superfície de ataque | Um adaptador por API |
+| Standard Collector at the entrance | No own protocol | One more service |
+| ClickHouse for spans | Analytical queries at volume | Operation and schema |
+| PostgreSQL for state | Updates and transactions | A second database |
+| One codebase, two processes | Simple `api` and `worker` | They scale together |
+| Ports and adapters | Swap judge, database and alert | More interfaces |
+| LiteLLM is not a dependency | Smaller attack surface | One adapter per API |
 
-Sem fila no MVP: o worker lê o ClickHouse por janelas de tempo, com uma
-folga para spans atrasados, e grava incidentes de forma idempotente
-(chave `trace_id` + `rule`). Avaliar uma fila quando houver medição.
+There is no queue in the MVP: the worker reads ClickHouse by time window,
+with some slack for late spans, and writes incidents idempotently (key
+`trace_id` + `rule`). Evaluate a queue once there are measurements.
 
-O schema do ClickHouse deve ser versionado em SQL no repositório, com
-`create_schema: false` no exporter.
+The ClickHouse schema must be versioned as SQL in the repository, with
+`create_schema: false` in the exporter.
 
-### Estrutura alvo
+### Target layout
 
 ```text
 rolda/
-├── deploy/compose/        # compose.yaml, collector e SQL
-├── docs/adr/              # decisões de arquitetura
+├── deploy/compose/        # compose.yaml, collector and SQL
+├── docs/adr/              # architecture decisions
 ├── src/rolda/
-│   ├── traces/            # modelo de domínio e normalização
+│   ├── traces/            # domain model and normalization
 │   ├── detection/         # vela
 │   ├── judge/             # sobrerrolda
-│   ├── incidents/         # causa provável e rótulos
-│   ├── evals/             # exportação
-│   ├── alerts/            # webhook e Slack
-│   └── entrypoints/       # api e worker
+│   ├── incidents/         # probable cause and labels
+│   ├── evals/             # export
+│   ├── alerts/            # webhook and Slack
+│   └── entrypoints/       # api and worker
 └── tests/
 ```
 
-## 4. Detecção (vela)
+## 4. Detection (vela)
 
-| Regra | Critério inicial (configurável) |
+| Rule | Initial criterion (configurable) |
 |---|---|
-| `span_error` | Span com status de erro |
-| `tool_loop` | Mesma ferramenta e argumentos 3 vezes no trace |
-| `latency_outlier` | z-score robusto (mediana e MAD) acima de 3,5 |
-| `token_outlier` | Mesmo cálculo sobre tokens por trace |
+| `span_error` | Span with an error status |
+| `tool_loop` | Same tool and arguments 3 times in a trace |
+| `latency_outlier` | Robust z-score (median and MAD) above 3.5 |
+| `token_outlier` | Same calculation on tokens per trace |
 
-Os limiares são pontos de partida, a calibrar com dados reais. Regras de
-outlier exigem ao menos 30 amostras por agente e ignoram MAD igual a zero.
-Se os argumentos da ferramenta não forem capturados, `tool_loop` compara só
-o nome e marca o achado como de baixa confiança.
+The thresholds are starting points, to calibrate with real data. Outlier
+rules need at least 30 samples per agent and ignore a MAD of zero. If the
+tool arguments are not captured, `tool_loop` compares only the name and
+marks the finding as low confidence.
 
-## 5. Causa provável
+## 5. Probable cause
 
-1. Localizar o primeiro span com erro ou o primeiro que dispara a regra.
-2. Montar o caminho da raiz até esse span.
-3. Agrupar incidentes pela assinatura `agente + regra + operação + erro`.
+1. Find the first span with an error, or the first one that triggers the
+   rule.
+2. Build the path from the root to that span.
+3. Group incidents by the signature `agent + rule + operation + error`.
 
-O resultado é uma hipótese, exibida com as evidências.
+The result is a hypothesis, shown with its evidence.
 
-## 6. Juiz (sobrerrolda)
+## 6. Judge (sobrerrolda)
 
-Analogia: um segundo revisor, chamado só quando a ronda vê algo estranho.
-
-| Fase | Estratégia | Uso |
+| Phase | Strategy | Use |
 |---|---|---|
-| 1 | `DisabledJudge` (padrão) | Revisão humana e coleta de rótulos |
-| 2 | API compatível com OpenAI | Modelo local (ex.: Ollama) ou hospedado |
-| 3 | Amazon Bedrock | Quem já usa AWS |
+| 1 | `DisabledJudge` (default) | Human review and label collection |
+| 2 | OpenAI-compatible API | Local model (for example Ollama) or hosted |
+| 3 | Amazon Bedrock | For those already on AWS |
 
-Regras:
+Rules:
 
-- Saída estruturada e validada: `failure`, `false_alarm` ou `uncertain`,
-  com justificativa. Resposta inválida vira `uncertain`.
-- Preferir um modelo de família diferente da usada pelo agente avaliado.
-- Comparar com rótulos humanos antes de confiar. Começar com 50 a 100
-  casos e exigir kappa de Cohen acima de 0,6.
-- Separar os casos usados para ajustar o prompt dos usados para medir.
-- Definir teto de chamadas por hora para controlar custo.
+- Structured, validated output: `failure`, `false_alarm` or `uncertain`,
+  with a justification. An invalid answer becomes `uncertain`.
+- Prefer a model from a different family than the evaluated agent.
+- Compare with human labels before trusting it. Start with 50 to 100
+  cases and require Cohen's kappa above 0.6.
+- Keep the cases used to tune the prompt apart from those used to measure.
+- Set a ceiling on calls per hour to control cost.
 
-## 7. Marcos
+## 7. Milestones
 
-Cada marco vira uma ou mais tarefas pequenas para o agente de código.
+Each milestone becomes one or more small tasks for the coding agent.
 
-| Marco | Entrega | Critério de aceite |
+| Milestone | Deliverable | Acceptance criterion |
 |---|---|---|
-| M0 | Repositório e CI | Todos os checks passam no GitHub |
-| M1 | Compose com Collector e ClickHouse | Span de teste consultável |
-| M2 | Modelo de domínio e normalização | Testes com fixtures reais |
-| M3 | Regras e worker | Reprocessar não duplica incidentes |
-| M4 | Incidentes, causa provável e alertas | Webhook recebe o alerta |
-| M5 | Rótulos e exportação de evals | JSONL validado por teste |
-| M6 | Adaptador do juiz | Kappa medido e publicado |
+| M0 | Repository and CI | All checks pass on GitHub |
+| M1 | Compose with Collector and ClickHouse | A test span can be queried |
+| M2 | Domain model and normalization | Tests with real fixtures |
+| M3 | Rules and worker | Reprocessing does not duplicate incidents |
+| M4 | Incidents, probable cause and alerts | The webhook receives the alert |
+| M5 | Labels and eval export | JSONL validated by a test |
+| M6 | Judge adapter | Kappa measured and published |
 
-Primeiro pedido sugerido ao Claude Code:
+Suggested first request to the coding agent:
 
-> Leia `AGENTS.md` e `docs/SPEC.md`. Planeje o marco M1 e espere minha
-> aprovação antes de escrever código.
+> Read `AGENTS.md` and `docs/SPEC.md`. Plan milestone M1 and wait for my
+> approval before writing code.
 
-## 8. Segurança e privacidade
+## 8. Security and privacy
 
-- Portas do Compose ligadas apenas a `127.0.0.1` por padrão.
-- Autenticação obrigatória antes de expor o OTLP ou a API na rede.
-- Captura de prompts e respostas desligada por padrão; redigir antes de
-  gravar.
-- Retenção configurável (TTL) no ClickHouse.
-- Conteúdo de traces é entrada não confiável, inclusive para o juiz.
+- Compose ports bound to `127.0.0.1` by default.
+- Authentication required before exposing OTLP or the API on a network.
+- Prompt and response capture off by default; redact before storing.
+- Configurable retention (TTL) in ClickHouse.
+- Trace content is untrusted input, the judge included.
 
-## 9. Decisões em aberto
+## 9. Open decisions
 
-- Licença (sugestão: Apache-2.0, por incluir concessão de patentes).
-- Interface: Grafana temporário ou UI própria na v0.2.
-- Estratégia de amostragem para volumes altos.
+- License (suggestion: Apache-2.0, because it includes a patent grant).
+- Interface: temporary Grafana or an own UI in v0.2.
+- Sampling strategy for high volumes.
