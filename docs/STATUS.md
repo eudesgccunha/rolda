@@ -15,7 +15,7 @@ proven, what is not, and what is needed to close the gap.
 | Detection (6 rules) | Working, thresholds calibrated on **simulated** data only |
 | Incidents, probable cause, idempotent storage | Working, verified on PostgreSQL |
 | Alerts (webhook, Slack, Google Chat, Teams) | Working, payloads verified against a real HTTP receiver; **not** rendered in real chat apps. Failed deliveries are retried per channel (outbox, M8a) |
-| Worker resilience (checkpoint, leader lock, whole traces, migrations, probes, metrics) | M8a implemented and unit-tested; **not yet run on the real stack**, see below |
+| Worker resilience (checkpoint, leader lock, whole traces, migrations, probes, metrics) | M8a implemented; the database adapters pass integration tests on the real stack; the running worker process and a kill-and-recover test are **not yet verified**, see below |
 | Labels and eval export (JSONL) | Working |
 | Judge adapter (Anthropic) and kappa measurement | Implemented and tested against a fake API; **never run against the real API**; **no kappa published** |
 | HTTP API (bearer token) | Working, verified on the real stores |
@@ -27,9 +27,9 @@ proven, what is not, and what is needed to close the gap.
 - **Unit tests:** 311, run on every push by CI (Python 3.12).
 - **Integration tests:** 16, against the Compose stack (ClickHouse,
   PostgreSQL, Collector). Run by hand with `uv run pytest -m integration`.
-  CI does not run them. The last full run was 10 tests, **before** M8a. The 6
-  tests added for M8a (migrations, checkpoint, leader lock, alert outbox,
-  reading spans by trace id) have not been run yet.
+  CI does not run them. The last full run, after M8a (2026-11-27), passed all
+  16, including migrations on both databases, the checkpoint, the leader lock,
+  the alert outbox and reading spans by trace id.
 - **Static checks:** `ruff` (format and lint), `mypy --strict`, `bandit`.
 - **Simulated agent:** `examples/support_agent` sends OpenTelemetry traces
   from a small agent whose **model is simulated** (no API key) and whose
@@ -38,11 +38,14 @@ proven, what is not, and what is needed to close the gap.
 
 ## What is not proven
 
-0. **The M8a worker changes on the real stack.** Migrations 004 and 005, the
-   checkpoint, the leader lock, the alert outbox, whole-trace evaluation and
-   the status server pass their unit tests with in-memory fakes. Nobody has
-   run them against the real PostgreSQL and ClickHouse yet, nor killed a
-   worker while it ran. Treat them as unverified until that is done.
+0. **The M8a worker as a running process.** The database adapters behind it
+   (migrations, checkpoint, leader lock, alert outbox, spans by trace id) pass
+   integration tests on the real PostgreSQL and ClickHouse. What nobody has
+   shown yet is the worker container running the whole loop against real
+   traffic, taking over from a killed worker, and losing no incident. An
+   earlier build of the worker exited at start because a `__main__` guard had
+   been deleted by mistake; `tests/entrypoints/test_entrypoints_run.py` now
+   runs each entry point as a real program so that cannot recur unnoticed.
 
 1. **Real agent traffic.** Every trace so far comes from fixtures or the
    simulated agent. Thresholds, false-alarm rates and recall on real
@@ -173,6 +176,6 @@ The plan is in [SPEC.md](SPEC.md).
 | M5 Labels and eval export | Done |
 | M6 Judge adapter | Adapter and kappa tooling done; **kappa not measured** |
 | M7 HTTP API (added) | Done |
-| M8a Worker resilience (added) | Implemented, unit-tested; real-stack run pending |
+| M8a Worker resilience (added) | Implemented; adapters verified on the real stack; worker process and kill test pending |
 | M8b Scale (baseline in ClickHouse, pool, load test) | Not started |
 | M8c Kubernetes (sharding, manifests, chaos test) | Not started |
