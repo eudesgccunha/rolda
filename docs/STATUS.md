@@ -121,10 +121,8 @@ metrics, versioned migrations and a connection pool.
 
 ## Before making the repository public
 
-- [ ] Choose a license and add `LICENSE`. The original plan suggests
-  Apache-2.0 because it includes a patent grant. Until a license exists,
-  nobody can legally reuse the code.
-- [ ] Set the license in `pyproject.toml` and the README.
+- [x] License chosen: Apache-2.0 (`LICENSE`, `NOTICE`, `pyproject.toml`,
+  README). It includes a patent grant.
 - [ ] Enable private vulnerability reporting on GitHub (see
   [SECURITY.md](../SECURITY.md) and [CODE_OF_CONDUCT.md](../CODE_OF_CONDUCT.md),
   which both point at it). GitHub offers it only on public repositories or

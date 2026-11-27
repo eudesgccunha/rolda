@@ -55,6 +55,11 @@ uv run pytest -m integration
 - Ask before adding a dependency, and commit `uv.lock` with it.
 - Pin GitHub Actions and container images by digest or commit SHA.
 
+## License
+
+By contributing you agree that your contribution is licensed under the
+[Apache License 2.0](LICENSE), as the rest of the project.
+
 ## Reporting security issues
 
 Do not open a public issue. See [SECURITY.md](SECURITY.md).

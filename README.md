@@ -171,5 +171,5 @@ rules for coding agents, which humans can follow too).
 
 ## License
 
-No license has been chosen yet, so no one may reuse the code. This will be
-decided before the first public release.
+Rolda is licensed under the [Apache License 2.0](LICENSE). It includes an
+express patent grant. Contributions are accepted under the same license.
