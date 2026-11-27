@@ -52,7 +52,8 @@ git clone https://github.com/eudesgccunha/rolda.git
 cd rolda/deploy/compose
 cp .env.example .env     # then set real passwords and a long API token
 docker compose --profile app up -d --build --wait
-curl http://127.0.0.1:8000/health
+curl http://127.0.0.1:8000/health   # liveness
+curl http://127.0.0.1:8000/ready    # checks both databases
 ```
 
 This starts ClickHouse, PostgreSQL, the Collector (OTLP on `127.0.0.1:4317`
@@ -110,6 +111,7 @@ Everything comes from the environment. Secrets never go in the repository.
 | `ROLDA_MAX_CATCHUP_SECONDS`, `ROLDA_CHUNK_SECONDS` | `86400`, `3600` | Longest outage the worker catches up on, and the size of each catch-up step |
 | `ROLDA_CLICKHOUSE_HOST/PORT`, `ROLDA_POSTGRES_HOST/PORT` | loopback | Database addresses |
 | `ROLDA_JUDGE_MODEL` | `claude-haiku-5-5` | Model for `judge-eval` |
+| `ROLDA_STATUS_HOST`, `ROLDA_STATUS_PORT` | `127.0.0.1`, `9100` | Worker `/healthz` and `/metrics` |
 
 Alert channels. Each is optional and must be an http or https URL. These
 URLs are secrets, and Rolda never logs them.

@@ -7,6 +7,7 @@ import os
 import signal
 import sys
 from collections.abc import Callable
+from datetime import timedelta
 
 from rolda.adapters.clickhouse import ClickHouseSpanSource
 from rolda.adapters.postgres import (
@@ -23,7 +24,14 @@ from rolda.adapters.webhook import (
 from rolda.alerts import Alerter
 from rolda.detection import default_rules
 from rolda.entrypoints.settings import Settings, SettingsError, load_settings
-from rolda.entrypoints.worker import Worker, WorkerConfig, serve
+from rolda.entrypoints.worker import (
+    Worker,
+    WorkerConfig,
+    register_worker_metrics,
+    serve,
+)
+from rolda.observability import Metrics
+from rolda.observability.status_server import StatusServer
 
 
 def main() -> None:
@@ -45,6 +53,8 @@ def main() -> None:
         if url:
             alerters.append(alerter_class(url))
     incidents = PostgresIncidentStore(settings.postgres_dsn)
+    metrics = Metrics()
+    register_worker_metrics(metrics)
     worker = Worker(
         source=ClickHouseSpanSource(settings),
         store=incidents,
@@ -52,11 +62,12 @@ def main() -> None:
         rules=default_rules(settings.detection),
         config=WorkerConfig(),
         alerters=alerters,
+        metrics=metrics,
     )
-    asyncio.run(_serve(worker, settings))
+    asyncio.run(_serve(worker, settings, metrics))
 
 
-async def _serve(worker: Worker, settings: Settings) -> None:
+async def _serve(worker: Worker, settings: Settings, metrics: Metrics) -> None:
     """Run until SIGTERM or SIGINT, then release the lock and return."""
     stop = asyncio.Event()
     loop = asyncio.get_running_loop()
@@ -67,15 +78,30 @@ async def _serve(worker: Worker, settings: Settings) -> None:
         with contextlib.suppress(TimeoutError):
             await asyncio.wait_for(stop.wait(), seconds)
 
-    await serve(
-        worker,
-        settings,
-        sleep=sleep,
-        checkpoints=PostgresCheckpointStore(settings.postgres_dsn),
-        leadership=PostgresLeadership(settings.postgres_dsn),
-        stop=stop,
+    status = StatusServer(
+        metrics,
+        host=settings.status_host,
+        port=settings.status_port,
+        # A window that takes this long without the loop moving is stuck.
+        max_age=max(5 * settings.interval, timedelta(minutes=5)),
     )
-
-
-if __name__ == "__main__":
-    main()
+    try:
+        await status.start()
+    except OSError:
+        logging.getLogger(__name__).warning(
+            "status server could not listen on %s:%d; continuing without it",
+            settings.status_host,
+            settings.status_port,
+        )
+    try:
+        await serve(
+            worker,
+            settings,
+            sleep=sleep,
+            checkpoints=PostgresCheckpointStore(settings.postgres_dsn),
+            leadership=PostgresLeadership(settings.postgres_dsn),
+            stop=stop,
+            metrics=metrics,
+        )
+    finally:
+        await status.stop()

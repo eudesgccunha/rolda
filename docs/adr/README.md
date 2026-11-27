@@ -17,6 +17,7 @@
 | [0013](0013-worker-checkpoint-and-leadership.md) | Worker checkpoint and leader lock |
 | [0014](0014-alert-outbox.md) | Alert outbox |
 | [0015](0015-zero-mad-fallback.md) | Outlier score when the MAD is zero |
+| [0016](0016-probes-and-metrics.md) | Probes and metrics |
 
 Add a new record as `NNNN-title.md` when a decision changes the architecture,
 a dependency or a security property.

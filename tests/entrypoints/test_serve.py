@@ -234,3 +234,23 @@ def test_serve_retries_the_same_window_after_an_error() -> None:
     first, retry, after = worker.windows
     assert retry[0] == first[0]
     assert after[0] == retry[1]
+
+
+def test_status_server_defaults_to_loopback() -> None:
+    settings = load_settings(ENV)
+
+    assert (settings.status_host, settings.status_port) == ("127.0.0.1", 9100)
+
+
+def test_status_server_can_be_moved() -> None:
+    settings = load_settings(
+        {**ENV, "ROLDA_STATUS_HOST": "0.0.0.0", "ROLDA_STATUS_PORT": "9200"}  # noqa: S104 - test value
+    )
+
+    assert (settings.status_host, settings.status_port) == ("0.0.0.0", 9200)  # noqa: S104 - test value
+
+
+@pytest.mark.parametrize("value", ["0", "70000", "http"])
+def test_status_port_must_be_valid(value: str) -> None:
+    with pytest.raises(SettingsError, match="ROLDA_STATUS_PORT"):
+        load_settings({**ENV, "ROLDA_STATUS_PORT": value})

@@ -102,6 +102,9 @@ services:
       ROLDA_SLACK_WEBHOOK_URL: ${ROLDA_SLACK_WEBHOOK_URL:-}
       ROLDA_GOOGLE_CHAT_WEBHOOK_URL: ${ROLDA_GOOGLE_CHAT_WEBHOOK_URL:-}
       ROLDA_TEAMS_WEBHOOK_URL: ${ROLDA_TEAMS_WEBHOOK_URL:-}
+      # Metrics and liveness. Reachable inside the Compose network only: the
+      # port is not published.
+      ROLDA_STATUS_HOST: 0.0.0.0
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -109,6 +112,16 @@ services:
         condition: service_healthy
       postgres:
         condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request as u; u.urlopen('http://127.0.0.1:9100/healthz', timeout=3)"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
     read_only: true
     tmpfs:
       - /tmp

@@ -7,6 +7,7 @@ import sys
 import uvicorn
 
 from rolda.adapters.clickhouse import ClickHouseSpanSource
+from rolda.adapters.health import clickhouse_check, postgres_check
 from rolda.adapters.postgres import PostgresIncidentStore, PostgresLabelStore
 from rolda.entrypoints.api import create_app
 from rolda.entrypoints.settings import (
@@ -31,6 +32,10 @@ def main() -> None:
         spans=ClickHouseSpanSource(settings),
         token=api.token,
         docs=api.docs,
+        readiness={
+            "postgres": postgres_check(settings.postgres_dsn),
+            "clickhouse": clickhouse_check(settings),
+        },
     )
     uvicorn.run(app, host=api.host, port=api.port, log_level="info")
 

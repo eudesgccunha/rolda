@@ -26,6 +26,8 @@ class Settings:
     interval: timedelta
     max_catchup: timedelta = timedelta(hours=24)
     chunk: timedelta = timedelta(hours=1)
+    status_host: str = "127.0.0.1"
+    status_port: int = 9100
     webhook_url: str | None = None
     slack_webhook_url: str | None = None
     google_chat_webhook_url: str | None = None
@@ -162,6 +164,8 @@ def load_settings(env: Mapping[str, str]) -> Settings:
         chunk=timedelta(
             seconds=_minimum_int(env, "ROLDA_CHUNK_SECONDS", 1, 3600)
         ),
+        status_host=env.get("ROLDA_STATUS_HOST", "127.0.0.1"),
+        status_port=_port(env, "ROLDA_STATUS_PORT", 9100),
         webhook_url=_optional_url(env, "ROLDA_WEBHOOK_URL"),
         slack_webhook_url=_optional_url(env, "ROLDA_SLACK_WEBHOOK_URL"),
         google_chat_webhook_url=_optional_url(

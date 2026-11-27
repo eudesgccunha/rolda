@@ -18,6 +18,7 @@ from rolda.incidents import (
     probable_cause,
 )
 from rolda.incidents.cause import hypothesis_for
+from rolda.observability import Metrics
 from rolda.traces import SpanSource, Trace, build_traces
 
 logger = logging.getLogger(__name__)
@@ -57,6 +58,38 @@ def _utc_now() -> datetime:
     return datetime.now(UTC)
 
 
+def register_worker_metrics(metrics: Metrics) -> None:
+    """Declare every metric the worker reports."""
+    metrics.describe(
+        "rolda_worker_windows_total",
+        "counter",
+        "Windows processed, by result.",
+    )
+    metrics.describe(
+        "rolda_worker_incidents_total", "counter", "New incidents created."
+    )
+    metrics.describe(
+        "rolda_worker_alerts_total",
+        "counter",
+        "Alert delivery attempts, by channel and result.",
+    )
+    metrics.describe(
+        "rolda_worker_is_leader",
+        "gauge",
+        "1 while this worker holds the leader lock, else 0.",
+    )
+    metrics.describe(
+        "rolda_worker_cursor_timestamp_seconds",
+        "gauge",
+        "End of the last processed window, as a Unix timestamp.",
+    )
+    metrics.describe(
+        "rolda_worker_lag_seconds",
+        "gauge",
+        "Seconds between now and the end of the last processed window.",
+    )
+
+
 def _settled(trace: Trace, cutoff: datetime) -> bool:
     """A trace is ready when its root arrived or it has been quiet long."""
     if any(span.parent_span_id is None for span in trace.spans):
@@ -76,6 +109,7 @@ class Worker:
         clock: Callable[[], datetime] = _utc_now,
         alerters: Sequence[Alerter] = (),
         outbox: AlertOutbox | None = None,
+        metrics: Metrics | None = None,
     ) -> None:
         self._source = source
         self._store = store
@@ -84,6 +118,7 @@ class Worker:
         self._clock = clock
         self._alerters = alerters
         self._outbox = outbox
+        self._metrics = metrics
         self._baseline: Baseline | None = None
         self._baseline_start: datetime | None = None
 
@@ -181,6 +216,14 @@ class Worker:
             delivered = False
         else:
             delivered = True
+        if self._metrics is not None:
+            self._metrics.inc(
+                "rolda_worker_alerts_total",
+                {
+                    "channel": alerter.name,
+                    "result": "ok" if delivered else "error",
+                },
+            )
         if self._outbox is not None:
             await self._outbox.mark_delivery(
                 incident.trace_id,
@@ -237,6 +280,7 @@ async def serve(
     leadership: Leadership | None = None,
     stop: asyncio.Event | None = None,
     name: str = "worker",
+    metrics: Metrics | None = None,
 ) -> None:
     """Run contiguous windows until ``stop`` is set or ``iterations`` pass.
 
@@ -245,7 +289,9 @@ async def serve(
     chunks. With a ``leadership`` only the worker that holds the lock works.
     A failed window is logged and retried from the same start.
     """
-    state = _LoopState(worker, settings, clock, checkpoints, leadership, name)
+    state = _LoopState(
+        worker, settings, clock, checkpoints, leadership, name, metrics
+    )
     count = 0
     try:
         while (iterations is None or count < iterations) and not (
@@ -271,6 +317,7 @@ class _LoopState:
         checkpoints: CheckpointStore | None,
         leadership: Leadership | None,
         name: str,
+        metrics: Metrics | None = None,
     ) -> None:
         self._worker = worker
         self._settings = settings
@@ -278,18 +325,35 @@ class _LoopState:
         self._checkpoints = checkpoints
         self._leadership = leadership
         self._name = name
+        self._metrics = metrics
         self._cursor: datetime | None = None
 
     async def _leads(self) -> bool:
-        if self._leadership is None:
-            return True
-        if await self._leadership.is_held():
-            return True
-        self._cursor = None
-        acquired = await self._leadership.try_acquire(self._name)
-        if not acquired:
-            logger.info("standing by: another worker holds the lock")
-        return acquired
+        if self._leadership is None or await self._leadership.is_held():
+            leads = True
+        else:
+            self._cursor = None
+            leads = await self._leadership.try_acquire(self._name)
+            if not leads:
+                logger.info("standing by: another worker holds the lock")
+        if self._metrics is not None:
+            self._metrics.set("rolda_worker_is_leader", 1 if leads else 0)
+        return leads
+
+    def _report(self, outcome: str, cursor: datetime | None = None) -> None:
+        if self._metrics is None:
+            return
+        self._metrics.inc("rolda_worker_windows_total", {"result": outcome})
+        if cursor is not None:
+            now = self._clock()
+            self._metrics.set(
+                "rolda_worker_cursor_timestamp_seconds",
+                int(cursor.timestamp()),
+            )
+            self._metrics.set(
+                "rolda_worker_lag_seconds",
+                max(0, int((now - cursor).total_seconds())),
+            )
 
     async def _start(self, end: datetime) -> datetime:
         if self._cursor is None and self._checkpoints is not None:
@@ -307,6 +371,8 @@ class _LoopState:
 
     async def step(self) -> bool:
         """Process one chunk. Return True when there is nothing left to do."""
+        if self._metrics is not None:
+            self._metrics.touch(self._clock())
         try:
             if not await self._leads():
                 return True
@@ -321,7 +387,13 @@ class _LoopState:
             self._cursor = chunk_end
         except Exception:
             logger.exception("window failed; retrying from the same start")
+            self._report("error")
             return True
+        self._report("ok", chunk_end)
+        if self._metrics is not None:
+            self._metrics.inc(
+                "rolda_worker_incidents_total", value=result.new_incidents
+            )
         logger.info(
             "window %s..%s traces=%d findings=%d new_incidents=%d",
             start.isoformat(),

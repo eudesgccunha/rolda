@@ -4,17 +4,19 @@ Every route except ``/health`` needs the bearer token. Trace content is
 returned only as JSON data. The API never writes anything but labels.
 """
 
+import asyncio
 import base64
 import binascii
 import hmac
 import json
-from collections.abc import Awaitable, Callable
+import logging
+from collections.abc import Awaitable, Callable, Mapping
 from datetime import UTC, datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException, Path
 from fastapi import Query as QueryParam
-from fastapi.responses import Response
+from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, ConfigDict, Field
 
 from rolda.evals import build_cases, to_line
@@ -31,6 +33,8 @@ from rolda.incidents import (
 )
 from rolda.judge import Verdict
 from rolda.traces import Span, SpanSource
+
+logger = logging.getLogger(__name__)
 
 MIN_TOKEN_LENGTH = 16
 MAX_LIMIT = 200
@@ -199,6 +203,8 @@ def create_app(  # noqa: C901 - one function wires all routes
     spans: SpanSource,
     token: str,
     docs: bool = False,
+    readiness: Mapping[str, Callable[[], Awaitable[None]]] | None = None,
+    readiness_timeout: float = 3.0,
 ) -> FastAPI:
     """Build the API around the given stores and bearer token."""
     if len(token) < MIN_TOKEN_LENGTH:
@@ -215,6 +221,23 @@ def create_app(  # noqa: C901 - one function wires all routes
     @app.get("/health")
     async def health() -> dict[str, str]:
         return {"status": "ok"}
+
+    @app.get("/ready")
+    async def ready() -> JSONResponse:
+        failed: list[str] = []
+        for name, check in (readiness or {}).items():
+            try:
+                await asyncio.wait_for(check(), readiness_timeout)
+            except Exception:
+                # The reason can hold connection details, so only the name
+                # goes to the caller. The log keeps the reason.
+                logger.exception("readiness check failed: %s", name)
+                failed.append(name)
+        if failed:
+            return JSONResponse(
+                {"status": "unavailable", "failed": failed}, status_code=503
+            )
+        return JSONResponse({"status": "ready"})
 
     @protected.get("/incidents")
     async def list_incidents(
