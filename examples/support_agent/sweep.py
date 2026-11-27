@@ -24,10 +24,15 @@ from rolda.detection import (
 from rolda.entrypoints.settings import load_settings
 from rolda.traces import build_traces
 
-OUTLIERS = ("latency_outlier", "span_latency_outlier", "token_outlier")
+OUTLIERS = (
+    "latency_outlier",
+    "span_latency_outlier",
+    "token_outlier",
+    "span_token_outlier",
+)
 FAULT_RULES = {
     "latency_outlier": {"latency_outlier", "span_latency_outlier"},
-    "token_blowup": {"token_outlier"},
+    "token_blowup": {"token_outlier", "span_token_outlier"},
 }
 LAG = timedelta(minutes=2)
 THRESHOLDS = (2.5, 3.0, 3.25, 3.5, 3.75, 4.0)
@@ -55,7 +60,15 @@ async def main() -> None:
     print(f"traces={len(traces)} baseline_traces={len(build_traces(history))}")
     print("z      latency  tokens  healthy_flagged  by_rule")
     for z in THRESHOLDS:
-        rules = default_rules(DetectionConfig(z_threshold=z))
+        # One shared threshold: clear the per-rule overrides.
+        config = DetectionConfig(
+            z_threshold=z,
+            latency_z=None,
+            span_latency_z=None,
+            token_z=None,
+            span_token_z=None,
+        )
+        rules = default_rules(config)
         found: dict[str, set[str]] = defaultdict(set)
         for trace in traces:
             findings = suppress_redundant(
@@ -72,9 +85,20 @@ async def main() -> None:
         by_rule = {
             rule: sum(rule in found[t] for t in healthy) for rule in OUTLIERS
         }
+        only_span = sum(
+            "span_token_outlier" in found[t]
+            for t, f in truth.items()
+            if f == "token_blowup"
+        )
+        only_trace = sum(
+            "token_outlier" in found[t]
+            for t, f in truth.items()
+            if f == "token_blowup"
+        )
         print(
             f"{z:<5}  {row[0]:>7}  {row[1]:>6}  "
             f"{len(flagged):>3}/{len(healthy):<12} {by_rule}"
+            f"  tokens: trace={only_trace} span={only_span}"
         )
 
 

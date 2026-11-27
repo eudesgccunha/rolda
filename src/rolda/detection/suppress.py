@@ -6,7 +6,12 @@ from rolda.detection.model import Finding
 
 PRIMARY_RULES = frozenset({"span_error", "tool_loop"})
 OUTLIER_RULES = frozenset(
-    {"latency_outlier", "token_outlier", "span_latency_outlier"}
+    {
+        "latency_outlier",
+        "token_outlier",
+        "span_latency_outlier",
+        "span_token_outlier",
+    }
 )
 
 

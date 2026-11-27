@@ -10,6 +10,7 @@ from rolda.detection.baseline import (
     TIMED_OPERATIONS,
     Baseline,
     span_key,
+    span_tokens,
     trace_duration_ns,
     trace_tokens,
 )
@@ -31,6 +32,7 @@ class DetectionConfig:
     latency_z: float | None = None
     span_latency_z: float | None = 3.0
     token_z: float | None = 2.5
+    span_token_z: float | None = None
 
     def z_for(self, rule: str) -> float:
         """Return the z-score threshold of a rule, or the shared value."""
@@ -38,6 +40,7 @@ class DetectionConfig:
             "latency_outlier": self.latency_z,
             "span_latency_outlier": self.span_latency_z,
             "token_outlier": self.token_z,
+            "span_token_outlier": self.span_token_z,
         }.get(rule)
         return self.z_threshold if override is None else override
 
@@ -240,6 +243,51 @@ class SpanLatencyOutlier:
         )
 
 
+class SpanTokenOutlier:
+    """Flag the model call that used far more tokens than usual.
+
+    Each LLM span is compared with spans of the same agent and name, on
+    the logarithm of its token count. One huge prompt shows up here even
+    when the trace total looks normal.
+    """
+
+    name = "span_token_outlier"
+
+    def __init__(self, config: DetectionConfig) -> None:
+        self._config = config
+
+    def evaluate(self, trace: Trace, baseline: Baseline) -> Sequence[Finding]:
+        """Report the most token-heavy outlying span, if any."""
+        agent = trace.root.agent
+        if agent is None:
+            return ()
+        worst: tuple[float, Span, int] | None = None
+        for span in trace.spans:
+            used = span_tokens(span)
+            history = baseline.span_tokens.get(span_key(agent, span), ())
+            if used is None or len(history) < self._config.min_samples:
+                continue
+            score = robust_z(_log(float(used)), [_log(h) for h in history])
+            if score is None or score <= self._config.z_for(self.name):
+                continue
+            if worst is None or score > worst[0]:
+                worst = (score, span, used)
+        if worst is None:
+            return ()
+        score, span, used = worst
+        return (
+            Finding(
+                trace_id=trace.trace_id,
+                rule=self.name,
+                span_id=span.span_id,
+                evidence=(
+                    f"span '{span.name}' used {used} tokens, "
+                    f"robust z-score {score:.1f} (log scale)"
+                ),
+            ),
+        )
+
+
 def default_rules(config: DetectionConfig) -> list[Rule]:
     """Return the MVP rules in a fixed order."""
     return [
@@ -248,4 +296,5 @@ def default_rules(config: DetectionConfig) -> list[Rule]:
         LatencyOutlier(config),
         SpanLatencyOutlier(config),
         TokenOutlier(config),
+        SpanTokenOutlier(config),
     ]

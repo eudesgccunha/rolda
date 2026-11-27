@@ -218,4 +218,5 @@ def test_default_rules_lists_the_rules() -> None:
         "latency_outlier",
         "span_latency_outlier",
         "token_outlier",
+        "span_token_outlier",
     ]

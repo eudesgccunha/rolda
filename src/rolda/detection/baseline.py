@@ -14,6 +14,16 @@ def span_key(agent: str, span: Span) -> str:
     return f"{agent}|{span.operation.value}|{span.tool_name or span.name}"
 
 
+def span_tokens(span: Span) -> int | None:
+    """Return the tokens of one LLM span, or None if none were reported."""
+    if span.operation is not Operation.LLM:
+        return None
+    counts = [
+        c for c in (span.input_tokens, span.output_tokens) if c is not None
+    ]
+    return sum(counts) if counts else None
+
+
 def trace_duration_ns(trace: Trace) -> int:
     """Return the duration of the trace root."""
     return trace.root.duration_ns
@@ -42,6 +52,7 @@ class Baseline:
     span_durations: Mapping[str, tuple[float, ...]] = field(
         default_factory=dict
     )
+    span_tokens: Mapping[str, tuple[float, ...]] = field(default_factory=dict)
 
     @classmethod
     def from_traces(cls, traces: Iterable[Trace]) -> "Baseline":
@@ -49,6 +60,7 @@ class Baseline:
         durations: dict[str, list[float]] = defaultdict(list)
         tokens: dict[str, list[float]] = defaultdict(list)
         spans: dict[str, list[float]] = defaultdict(list)
+        span_token_samples: dict[str, list[float]] = defaultdict(list)
         for trace in traces:
             agent = trace.root.agent
             if agent is None:
@@ -62,8 +74,14 @@ class Baseline:
                     spans[span_key(agent, span)].append(
                         float(span.duration_ns)
                     )
+                used = span_tokens(span)
+                if used is not None:
+                    span_token_samples[span_key(agent, span)].append(
+                        float(used)
+                    )
         return cls(
             durations={k: tuple(v) for k, v in durations.items()},
             tokens={k: tuple(v) for k, v in tokens.items()},
             span_durations={k: tuple(v) for k, v in spans.items()},
+            span_tokens={k: tuple(v) for k, v in span_token_samples.items()},
         )
