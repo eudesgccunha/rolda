@@ -1,0 +1,8 @@
+# Files that can change what runs in CI, what ships in the image or which
+# code is installed. A change here deserves a careful look.
+/.github/              @eudesgccunha
+/deploy/               @eudesgccunha
+/pyproject.toml        @eudesgccunha
+/uv.lock               @eudesgccunha
+/SECURITY.md           @eudesgccunha
+/LICENSE               @eudesgccunha

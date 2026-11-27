@@ -33,3 +33,30 @@ yet.
   environment and does not log them.
 
 Known limitations are listed in [docs/STATUS.md](docs/STATUS.md).
+
+## Supply chain hardening
+
+- CI has no secrets, runs with read-only permissions and uses no
+  `pull_request_target` or `workflow_run` trigger. Actions are pinned to
+  full commit SHAs, and GitHub enforces that.
+- Python dependencies are locked with hashes (`uv.lock`) and installed with
+  `--locked`. Container images are pinned by digest.
+- CI runs `zizmor` on the workflows and `pip-audit` on the locked
+  dependencies. A weekly job repeats the audit.
+- Dependabot proposes updates with a 7 day cooldown, so a freshly published
+  release is not adopted at once.
+- Maintainers use two-factor authentication and short-lived, narrowly
+  scoped tokens.
+
+## If you suspect a compromise
+
+The wfx-loot campaign of November 2026 used stolen account tokens to push
+secret-stealing workflows. If something similar happens here:
+
+1. Look for unexpected branches (for example `wfx-docs`), pull requests,
+   workflow files and workflow runs, and for gaps in run numbers.
+2. Revoke the personal access tokens, SSH keys and OAuth apps of every
+   account that could write to the repository, then rotate any secret those
+   workflows could reach. This project keeps no secrets in CI.
+3. Check cloud trust policies and federated credentials, not only keys.
+4. Report it through the private channel described above.
