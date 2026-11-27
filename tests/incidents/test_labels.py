@@ -91,3 +91,17 @@ def test_labeled_returns_the_incident_with_its_label() -> None:
 
     assert incident.signature == "a|span_error|tool|boom"
     assert label.labeler == "ana"
+
+
+def test_for_trace_returns_labels_of_every_source() -> None:
+    _, labels = _stores()
+    asyncio.run(labels.upsert(_label(Verdict.FAILURE, LabelSource.HUMAN)))
+    asyncio.run(labels.upsert(_label(Verdict.UNCERTAIN, LabelSource.JUDGE)))
+
+    result = asyncio.run(labels.for_trace("t1"))
+
+    assert {label.source for label in result} == {
+        LabelSource.HUMAN,
+        LabelSource.JUDGE,
+    }
+    assert asyncio.run(labels.for_trace("other")) == []

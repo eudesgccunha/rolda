@@ -4,7 +4,7 @@ from collections.abc import Sequence
 from typing import Protocol
 
 from rolda.incidents.labels import Label, LabelSource
-from rolda.incidents.model import Incident
+from rolda.incidents.model import Incident, OrderKey
 
 
 class UnknownIncidentError(LookupError):
@@ -19,6 +19,25 @@ class IncidentStore(Protocol):
 
         Return True when the incident is new.
         """
+        ...
+
+    async def list(
+        self,
+        *,
+        rule: str | None = None,
+        agent: str | None = None,
+        limit: int = 50,
+        after: OrderKey | None = None,
+    ) -> Sequence[Incident]:
+        """Return incidents newest first.
+
+        ``after`` is the ``order_key`` of the last incident of the previous
+        page. Only older incidents are returned.
+        """
+        ...
+
+    async def for_trace(self, trace_id: str) -> Sequence[Incident]:
+        """Return every incident of one trace."""
         ...
 
 
@@ -36,4 +55,8 @@ class LabelStore(Protocol):
         self, source: LabelSource
     ) -> Sequence[tuple[Incident, Label]]:
         """Return labeled incidents from one source, oldest label first."""
+        ...
+
+    async def for_trace(self, trace_id: str) -> Sequence[Label]:
+        """Return the labels of every incident of one trace."""
         ...

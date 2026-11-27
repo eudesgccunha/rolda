@@ -3,7 +3,7 @@
 from collections.abc import Sequence
 
 from rolda.incidents.labels import Label, LabelSource
-from rolda.incidents.model import Incident
+from rolda.incidents.model import Incident, OrderKey, agent_of, order_key
 from rolda.incidents.ports import UnknownIncidentError
 
 
@@ -25,6 +25,29 @@ class InMemoryIncidentStore:
         """Return stored incidents in insertion order."""
         return list(self._items.values())
 
+    async def list(
+        self,
+        *,
+        rule: str | None = None,
+        agent: str | None = None,
+        limit: int = 50,
+        after: OrderKey | None = None,
+    ) -> Sequence[Incident]:
+        """Return incidents newest first, with filters and a cursor."""
+        found = [
+            i
+            for i in self._items.values()
+            if (rule is None or i.rule == rule)
+            and (agent is None or agent_of(i) == agent)
+            and (after is None or order_key(i) < after)
+        ]
+        found.sort(key=order_key, reverse=True)
+        return found[:limit]
+
+    async def for_trace(self, trace_id: str) -> Sequence[Incident]:
+        """Return every incident of one trace."""
+        return [i for i in self._items.values() if i.trace_id == trace_id]
+
 
 class InMemoryLabelStore:
     """Keep labels keyed by ``(trace_id, rule, source)``."""
@@ -40,6 +63,14 @@ class InMemoryLabelStore:
             msg = f"no incident for trace {label.trace_id} rule {label.rule}"
             raise UnknownIncidentError(msg)
         self._labels[(label.trace_id, label.rule, label.source)] = label
+
+    async def for_trace(self, trace_id: str) -> Sequence[Label]:
+        """Return the labels of every incident of one trace."""
+        return [
+            label
+            for label in self._labels.values()
+            if label.trace_id == trace_id
+        ]
 
     async def labeled(
         self, source: LabelSource

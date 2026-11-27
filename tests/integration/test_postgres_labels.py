@@ -87,3 +87,24 @@ def test_label_for_unknown_incident_is_rejected() -> None:
         asyncio.run(
             labels.upsert(_label("f" * 32, Verdict.FAILURE, LabelSource.HUMAN))
         )
+
+
+def test_for_trace_returns_the_labels_of_a_trace() -> None:
+    incidents = PostgresIncidentStore(_dsn())
+    labels = PostgresLabelStore(_dsn())
+    trace_id = secrets.token_hex(16)
+    asyncio.run(incidents.save(_incident(trace_id)))
+    asyncio.run(
+        labels.upsert(_label(trace_id, Verdict.FAILURE, LabelSource.HUMAN))
+    )
+    asyncio.run(
+        labels.upsert(_label(trace_id, Verdict.UNCERTAIN, LabelSource.JUDGE))
+    )
+
+    result = asyncio.run(labels.for_trace(trace_id))
+
+    assert {(x.source, x.verdict) for x in result} == {
+        (LabelSource.HUMAN, Verdict.FAILURE),
+        (LabelSource.JUDGE, Verdict.UNCERTAIN),
+    }
+    assert asyncio.run(labels.for_trace("no-such-trace")) == []

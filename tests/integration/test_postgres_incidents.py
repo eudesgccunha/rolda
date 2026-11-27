@@ -14,7 +14,7 @@ import pytest
 
 from rolda.adapters.postgres import PostgresIncidentStore
 from rolda.detection import Confidence
-from rolda.incidents import Incident
+from rolda.incidents import Incident, order_key
 
 pytestmark = pytest.mark.integration
 
@@ -80,3 +80,33 @@ def test_other_rule_on_same_trace_is_a_new_incident() -> None:
 
     assert created is True
     assert len(_rows(trace_id)) == 2
+
+
+def test_list_filters_pages_and_reads_back_a_trace() -> None:
+    store = PostgresIncidentStore(_dsn())
+    agent = f"agent-{secrets.token_hex(4)}"
+    ids = [secrets.token_hex(16) for _ in range(3)]
+    for index, trace_id in enumerate(ids):
+        incident = Incident(
+            trace_id=trace_id,
+            rule="span_error",
+            span_id="s1",
+            evidence="boom",
+            confidence=Confidence.LOW,
+            signature=f"{agent}|span_error|tool|boom",
+            path=("root", "tool"),
+            detected_at=datetime(2026, 11, 26, 10, index, tzinfo=UTC),
+        )
+        asyncio.run(store.save(incident))
+
+    first = asyncio.run(store.list(agent=agent, limit=2))
+    second = asyncio.run(
+        store.list(agent=agent, limit=2, after=order_key(first[-1]))
+    )
+
+    assert [i.trace_id for i in first] == [ids[2], ids[1]]
+    assert [i.trace_id for i in second] == [ids[0]]
+    assert asyncio.run(store.list(rule="no_such_rule", agent=agent)) == []
+    [found] = asyncio.run(store.for_trace(ids[0]))
+    assert found.evidence == "boom"
+    assert found.path == ("root", "tool")
