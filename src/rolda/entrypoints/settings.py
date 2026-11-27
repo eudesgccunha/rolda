@@ -24,6 +24,8 @@ class Settings:
     postgres_dsn: str
     window: timedelta
     interval: timedelta
+    max_catchup: timedelta = timedelta(hours=24)
+    chunk: timedelta = timedelta(hours=1)
     webhook_url: str | None = None
     slack_webhook_url: str | None = None
     google_chat_webhook_url: str | None = None
@@ -153,6 +155,12 @@ def load_settings(env: Mapping[str, str]) -> Settings:
         ),
         interval=timedelta(
             seconds=_minimum_int(env, "ROLDA_INTERVAL_SECONDS", 1, 60)
+        ),
+        max_catchup=timedelta(
+            seconds=_minimum_int(env, "ROLDA_MAX_CATCHUP_SECONDS", 1, 86400)
+        ),
+        chunk=timedelta(
+            seconds=_minimum_int(env, "ROLDA_CHUNK_SECONDS", 1, 3600)
         ),
         webhook_url=_optional_url(env, "ROLDA_WEBHOOK_URL"),
         slack_webhook_url=_optional_url(env, "ROLDA_SLACK_WEBHOOK_URL"),

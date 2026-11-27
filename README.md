@@ -106,7 +106,8 @@ Everything comes from the environment. Secrets never go in the repository.
 | `ROLDA_API_TOKEN` | required for the API | Bearer token, at least 16 characters |
 | `ROLDA_API_HOST`, `ROLDA_API_PORT` | `127.0.0.1`, `8000` | API bind address |
 | `ROLDA_API_DOCS` | `false` | Serve the OpenAPI docs |
-| `ROLDA_WINDOW_SECONDS`, `ROLDA_INTERVAL_SECONDS` | `300`, `60` | Worker window and period |
+| `ROLDA_WINDOW_SECONDS`, `ROLDA_INTERVAL_SECONDS` | `300`, `60` | Worker first-run lookback and period |
+| `ROLDA_MAX_CATCHUP_SECONDS`, `ROLDA_CHUNK_SECONDS` | `86400`, `3600` | Longest outage the worker catches up on, and the size of each catch-up step |
 | `ROLDA_CLICKHOUSE_HOST/PORT`, `ROLDA_POSTGRES_HOST/PORT` | loopback | Database addresses |
 | `ROLDA_JUDGE_MODEL` | `claude-haiku-5-5` | Model for `judge-eval` |
 

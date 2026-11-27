@@ -8,6 +8,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Protocol
 
 from rolda.alerts import Alert, AlertDeliveryError, Alerter
+from rolda.checkpoints import CheckpointStore, Leadership
 from rolda.detection import Baseline, Rule, suppress_redundant
 from rolda.entrypoints.settings import Settings
 from rolda.incidents import (
@@ -159,35 +160,102 @@ async def serve(
     clock: Callable[[], datetime] = _utc_now,
     sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
     iterations: int | None = None,
+    *,
+    checkpoints: CheckpointStore | None = None,
+    leadership: Leadership | None = None,
+    stop: asyncio.Event | None = None,
+    name: str = "worker",
 ) -> None:
-    """Run contiguous windows forever, or ``iterations`` times.
+    """Run contiguous windows until ``stop`` is set or ``iterations`` pass.
 
-    A failed window is logged and retried from the same start, so an outage
-    of the databases or a bad window does not skip spans or end the process.
+    With a checkpoint store the worker resumes where the last one stopped. A
+    long outage is capped at ``max_catchup`` and the rest is processed in
+    chunks. With a ``leadership`` only the worker that holds the lock works.
+    A failed window is logged and retried from the same start.
     """
-    cursor: datetime | None = None
+    state = _LoopState(worker, settings, clock, checkpoints, leadership, name)
     count = 0
-    while iterations is None or count < iterations:
-        end = clock()
-        start = cursor or end - settings.window
+    try:
+        while (iterations is None or count < iterations) and not (
+            stop is not None and stop.is_set()
+        ):
+            count += 1
+            caught_up = await state.step()
+            if caught_up:
+                await sleep(settings.interval.total_seconds())
+    finally:
+        if leadership is not None:
+            await leadership.release()
+
+
+class _LoopState:
+    """What ``serve`` remembers between iterations."""
+
+    def __init__(
+        self,
+        worker: WindowRunner,
+        settings: Settings,
+        clock: Callable[[], datetime],
+        checkpoints: CheckpointStore | None,
+        leadership: Leadership | None,
+        name: str,
+    ) -> None:
+        self._worker = worker
+        self._settings = settings
+        self._clock = clock
+        self._checkpoints = checkpoints
+        self._leadership = leadership
+        self._name = name
+        self._cursor: datetime | None = None
+
+    async def _leads(self) -> bool:
+        if self._leadership is None:
+            return True
+        if await self._leadership.is_held():
+            return True
+        self._cursor = None
+        acquired = await self._leadership.try_acquire(self._name)
+        if not acquired:
+            logger.info("standing by: another worker holds the lock")
+        return acquired
+
+    async def _start(self, end: datetime) -> datetime:
+        if self._cursor is None and self._checkpoints is not None:
+            self._cursor = await self._checkpoints.get(self._name)
+        start = self._cursor or end - self._settings.window
+        oldest = end - self._settings.max_catchup
+        if start < oldest:
+            logger.warning(
+                "skipping %s of unprocessed spans: the worker was down "
+                "longer than ROLDA_MAX_CATCHUP_SECONDS",
+                oldest - start,
+            )
+            start = oldest
+        return start
+
+    async def step(self) -> bool:
+        """Process one chunk. Return True when there is nothing left to do."""
         try:
-            result = await worker.run_window(start, end)
+            if not await self._leads():
+                return True
+            end = self._clock()
+            start = await self._start(end)
+            chunk_end = min(end, start + self._settings.chunk)
+            # A failure below keeps this start, so the same window is retried.
+            self._cursor = start
+            result = await self._worker.run_window(start, chunk_end)
+            if self._checkpoints is not None:
+                await self._checkpoints.set(self._name, chunk_end)
+            self._cursor = chunk_end
         except Exception:
-            logger.exception(
-                "window %s..%s failed; retrying",
-                start.isoformat(),
-                end.isoformat(),
-            )
-            cursor = start
-        else:
-            logger.info(
-                "window %s..%s traces=%d findings=%d new_incidents=%d",
-                start.isoformat(),
-                end.isoformat(),
-                result.traces,
-                result.findings,
-                result.new_incidents,
-            )
-            cursor = end
-        count += 1
-        await sleep(settings.interval.total_seconds())
+            logger.exception("window failed; retrying from the same start")
+            return True
+        logger.info(
+            "window %s..%s traces=%d findings=%d new_incidents=%d",
+            start.isoformat(),
+            chunk_end.isoformat(),
+            result.traces,
+            result.findings,
+            result.new_incidents,
+        )
+        return chunk_end >= end

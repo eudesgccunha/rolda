@@ -1,6 +1,8 @@
 """PostgreSQL adapter for the ``IncidentStore`` port."""
 
+import contextlib
 from collections.abc import Sequence
+from datetime import datetime
 from typing import Any
 
 import psycopg
@@ -211,3 +213,86 @@ class PostgresLabelStore:
             )
             for row in rows
         ]
+
+
+_UPSERT_CURSOR = """
+INSERT INTO worker_state (name, cursor) VALUES (%s, %s)
+ON CONFLICT (name) DO UPDATE SET cursor = EXCLUDED.cursor, updated_at = now()
+"""
+
+
+class PostgresCheckpointStore:
+    """Keep the worker cursor in the ``worker_state`` table."""
+
+    def __init__(self, dsn: str) -> None:
+        self._dsn = dsn
+
+    async def get(self, name: str) -> datetime | None:
+        """Return the saved cursor, or None if there is none."""
+        async with await psycopg.AsyncConnection.connect(self._dsn) as conn:
+            cursor = await conn.execute(
+                "SELECT cursor FROM worker_state WHERE name = %s", (name,)
+            )
+            row = await cursor.fetchone()
+        return row[0] if row else None
+
+    async def set(self, name: str, value: datetime) -> None:
+        """Save the cursor."""
+        async with await psycopg.AsyncConnection.connect(self._dsn) as conn:
+            await conn.execute(_UPSERT_CURSOR, (name, value))
+
+
+class PostgresLeadership:
+    """Lead through a session-level advisory lock on a held connection.
+
+    The lock vanishes with the connection, so a crashed or partitioned
+    worker never keeps it.
+    """
+
+    def __init__(self, dsn: str) -> None:
+        self._dsn = dsn
+        self._conn: psycopg.AsyncConnection | None = None
+
+    async def try_acquire(self, name: str) -> bool:
+        """Take the lock without waiting. Return True if this worker leads."""
+        if self._conn is not None:
+            return True
+        conn = await psycopg.AsyncConnection.connect(
+            self._dsn, autocommit=True
+        )
+        try:
+            cursor = await conn.execute(
+                "SELECT pg_try_advisory_lock(hashtextextended(%s, 0))",
+                (f"rolda:{name}",),
+            )
+            row = await cursor.fetchone()
+            got = bool(row and row[0])
+        except BaseException:
+            await conn.close()
+            raise
+        if not got:
+            await conn.close()
+            return False
+        self._conn = conn
+        return True
+
+    async def is_held(self) -> bool:
+        """Return True while the connection that holds the lock is alive."""
+        if self._conn is None:
+            return False
+        try:
+            await self._conn.execute("SELECT 1")
+        except psycopg.Error:
+            await self._drop()
+            return False
+        return True
+
+    async def release(self) -> None:
+        """Close the connection, which releases the lock."""
+        await self._drop()
+
+    async def _drop(self) -> None:
+        conn, self._conn = self._conn, None
+        if conn is not None:
+            with contextlib.suppress(psycopg.Error):
+                await conn.close()
