@@ -142,3 +142,29 @@ def test_chat_and_teams_urls_are_optional_and_validated() -> None:
 def test_invalid_chat_or_teams_url_is_an_error(name: str) -> None:
     with pytest.raises(SettingsError, match=name):
         load_settings({**ENV, name: "file:///etc/passwd"})
+
+
+@pytest.mark.parametrize("blank", ["", " ", "   ", "\t", " \n "])
+def test_blank_webhook_values_count_as_not_configured(blank: str) -> None:
+    settings = load_settings(
+        {
+            **ENV,
+            "ROLDA_WEBHOOK_URL": blank,
+            "ROLDA_SLACK_WEBHOOK_URL": blank,
+            "ROLDA_GOOGLE_CHAT_WEBHOOK_URL": blank,
+            "ROLDA_TEAMS_WEBHOOK_URL": blank,
+        }
+    )
+
+    assert settings.webhook_url is None
+    assert settings.slack_webhook_url is None
+    assert settings.google_chat_webhook_url is None
+    assert settings.teams_webhook_url is None
+
+
+def test_webhook_url_is_trimmed() -> None:
+    settings = load_settings(
+        {**ENV, "ROLDA_WEBHOOK_URL": "  https://hooks.example.com/a \n"}
+    )
+
+    assert settings.webhook_url == "https://hooks.example.com/a"

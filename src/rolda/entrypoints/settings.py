@@ -102,7 +102,7 @@ def _detection(env: Mapping[str, str]) -> DetectionConfig:
 
 
 def _optional_url(env: Mapping[str, str], name: str) -> str | None:
-    value = env.get(name)
+    value = env.get(name, "").strip()
     if not value:
         return None
     parts = urlsplit(value)
