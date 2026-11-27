@@ -1,0 +1,20 @@
+# Keep secrets, history and non-runtime files out of the build context.
+.env
+.env.*
+!.env.example
+**/.env
+**/.env.*
+.git
+.github
+.claude
+.venv
+**/__pycache__
+.mypy_cache
+.ruff_cache
+.pytest_cache
+.coverage
+tests
+examples
+docs
+data
+node_modules

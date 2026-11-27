@@ -78,6 +78,22 @@ value stops the worker at start.
 
 Lower values catch more and raise more false alarms.
 
+## Running the worker and API in containers
+
+For development, one command starts the databases, the Collector, the worker
+and the API. Add `ROLDA_API_TOKEN` (at least 16 characters) to
+`deploy/compose/.env` first:
+
+```bash
+cd deploy/compose
+docker compose --profile app up -d --build
+curl http://127.0.0.1:8000/health
+```
+
+`docker compose up` without `--profile app` still starts only the
+infrastructure. The API is published on `127.0.0.1` only. See
+`docs/adr/0011-container-image.md`.
+
 ## Labeling and evals
 
 Label an incident, then export the labeled set as a regression file:
