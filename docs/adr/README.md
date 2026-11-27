@@ -13,6 +13,7 @@
 | [0009](0009-redundant-outliers-and-span-latency.md) | Redundant outliers, per-span rules and calibration |
 | [0010](0010-http-api.md) | HTTP API |
 | [0011](0011-container-image.md) | Container image and Compose services |
+| [0012](0012-schema-migrations.md) | Versioned schema migrations |
 
 Add a new record as `NNNN-title.md` when a decision changes the architecture,
 a dependency or a security property.

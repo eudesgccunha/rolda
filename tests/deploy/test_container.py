@@ -82,7 +82,7 @@ def test_compose_has_no_literal_secret_values() -> None:
 def test_app_services_use_the_app_profile_and_a_hardened_runtime() -> None:
     text = COMPOSE.read_text(encoding="utf-8")
 
-    for service in ("worker", "api"):
+    for service in ("migrate", "worker", "api"):
         block = text.split(f"\n  {service}:\n", 1)[1].split("\n\n", 1)[0]
         assert 'profiles: ["app"]' in block, service
         assert "read_only: true" in block, service
