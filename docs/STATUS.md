@@ -55,6 +55,22 @@ proven, what is not, and what is needed to close the gap.
 
 ## Known limitations
 
+- **Error text is stored.** A span's status message is kept in the
+  incident evidence and appears in alerts and in the API. It is untrusted
+  text from your agent and is **not redacted**: it can contain data. The
+  eval export and the judge do not receive it. Only the agent, rule and
+  operation of the signature leave the database.
+- **Long traces are cut by the window.** The worker reads spans by start
+  time, so a trace longer than the window lag (2 minutes) may be judged
+  without its root span.
+- **No checkpoint.** The worker keeps the end of its last window in memory.
+  After a restart it resumes at "now minus the window", so an outage longer
+  than the window (5 minutes) leaves those traces unanalyzed. A failed
+  window inside a running worker is retried.
+- **A MAD of zero turns an outlier rule off** for that group, as the plan
+  says. A span that always uses exactly the same tokens never alerts, even
+  on an extreme value.
+
 - One shared bearer token for the API. No users, roles or rate limiting.
   Put TLS in front before exposing it.
 - The OTLP receiver has no authentication. The Compose file binds it to
@@ -68,6 +84,32 @@ proven, what is not, and what is needed to close the gap.
   the evals see behavior only: spans, tools, status, tokens and durations.
 - The worker is not wired to the judge. Judging is measured first.
 
+## Scalability
+
+Measured on one core: normalizing runs at about 117,000 spans per second and
+a retained span takes about 442 bytes. CPU is not the limit.
+
+The limits are the architecture:
+
+- The worker loads the 7-day baseline as Python objects every hour. By that
+  measurement, 10 spans per second needs roughly 3 GB for the baseline alone
+  and 100 spans per second roughly 27 GB (an estimate, and it ignores the raw
+  rows held at the same time). The baseline should be computed inside
+  ClickHouse instead.
+- Extra worker replicas repeat the same work. They are safe (one winner
+  writes and alerts) but do not add throughput. Scaling out needs a
+  partition by trace id.
+- The databases are single nodes, there are no schema migrations at run
+  time, the API has no readiness check on the databases and the project has
+  no `/metrics`.
+- The Collector queue is in memory, so a killed pod loses its batch.
+- There are no Kubernetes manifests or Helm chart yet.
+
+Fine for a small deployment (a few spans per second). Not ready for high
+volume. The planned next step (M8) is a Postgres checkpoint, computing the
+baseline in ClickHouse, evaluating whole traces, readiness probes and
+metrics, versioned migrations and a connection pool.
+
 ## What is needed to move forward
 
 | To do | Requirement |
@@ -79,10 +121,8 @@ proven, what is not, and what is needed to close the gap.
 
 ## Before making the repository public
 
-- [ ] Choose a license and add `LICENSE`. The original plan suggests
-  Apache-2.0 because it includes a patent grant. Until a license exists,
-  nobody can legally reuse the code.
-- [ ] Set the license in `pyproject.toml` and the README.
+- [x] License chosen: Apache-2.0 (`LICENSE`, `NOTICE`, `pyproject.toml`,
+  README). It includes a patent grant.
 - [ ] Enable private vulnerability reporting on GitHub (see
   [SECURITY.md](../SECURITY.md) and [CODE_OF_CONDUCT.md](../CODE_OF_CONDUCT.md),
   which both point at it). GitHub offers it only on public repositories or

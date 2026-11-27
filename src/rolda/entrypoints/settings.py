@@ -50,6 +50,14 @@ def _number(env: Mapping[str, str], name: str, default: int) -> int:
         raise SettingsError(msg) from exc
 
 
+def _port(env: Mapping[str, str], name: str, default: int) -> int:
+    value = _number(env, name, default)
+    if not 1 <= value <= 65535:
+        msg = f"{name} must be between 1 and 65535, got {value}"
+        raise SettingsError(msg)
+    return value
+
+
 def _z_score(
     env: Mapping[str, str], name: str, default: float | None
 ) -> float | None:
@@ -109,7 +117,21 @@ def _optional_url(env: Mapping[str, str], name: str) -> str | None:
     if parts.scheme not in ("http", "https") or not parts.hostname:
         msg = f"{name} must be an http or https URL with a host"
         raise SettingsError(msg)
+    try:
+        parts.port  # noqa: B018 - reading it validates the port
+    except ValueError as exc:
+        msg = f"{name} has an invalid port"
+        raise SettingsError(msg) from exc
     return value
+
+
+def load_postgres_dsn(env: Mapping[str, str]) -> str:
+    """Build only the PostgreSQL DSN, for commands that need no ClickHouse."""
+    user = quote(_required(env, "POSTGRES_USER"), safe="")
+    password = quote(_required(env, "POSTGRES_PASSWORD"), safe="")
+    host = env.get("ROLDA_POSTGRES_HOST", "127.0.0.1")
+    port = _port(env, "ROLDA_POSTGRES_PORT", 5432)
+    return f"postgresql://{user}:{password}@{host}:{port}/rolda"
 
 
 def load_settings(env: Mapping[str, str]) -> Settings:
@@ -117,17 +139,21 @@ def load_settings(env: Mapping[str, str]) -> Settings:
     pg_user = quote(_required(env, "POSTGRES_USER"), safe="")
     pg_password = quote(_required(env, "POSTGRES_PASSWORD"), safe="")
     pg_host = env.get("ROLDA_POSTGRES_HOST", "127.0.0.1")
-    pg_port = _number(env, "ROLDA_POSTGRES_PORT", 5432)
+    pg_port = _port(env, "ROLDA_POSTGRES_PORT", 5432)
     return Settings(
         clickhouse_host=env.get("ROLDA_CLICKHOUSE_HOST", "127.0.0.1"),
-        clickhouse_port=_number(env, "ROLDA_CLICKHOUSE_PORT", 8123),
+        clickhouse_port=_port(env, "ROLDA_CLICKHOUSE_PORT", 8123),
         clickhouse_user=_required(env, "CLICKHOUSE_USER"),
         clickhouse_password=_required(env, "CLICKHOUSE_PASSWORD"),
         postgres_dsn=(
             f"postgresql://{pg_user}:{pg_password}@{pg_host}:{pg_port}/rolda"
         ),
-        window=timedelta(seconds=_number(env, "ROLDA_WINDOW_SECONDS", 300)),
-        interval=timedelta(seconds=_number(env, "ROLDA_INTERVAL_SECONDS", 60)),
+        window=timedelta(
+            seconds=_minimum_int(env, "ROLDA_WINDOW_SECONDS", 1, 300)
+        ),
+        interval=timedelta(
+            seconds=_minimum_int(env, "ROLDA_INTERVAL_SECONDS", 1, 60)
+        ),
         webhook_url=_optional_url(env, "ROLDA_WEBHOOK_URL"),
         slack_webhook_url=_optional_url(env, "ROLDA_SLACK_WEBHOOK_URL"),
         google_chat_webhook_url=_optional_url(

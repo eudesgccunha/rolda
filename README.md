@@ -26,8 +26,10 @@ the probable cause and turns confirmed failures into eval cases.
 - **Serves an HTTP API** to list incidents, read a trace's behavior and
   record labels.
 
-It reads behavior only: spans, tools, status, tokens and durations. Prompt
-and response content is not stored or used.
+It reads behavior: spans, tools, status, tokens and durations. Prompt and
+response content is not stored or used. A span's error message is kept in the
+incident and shown in alerts and the API, unredacted, so keep secrets out of
+your error messages.
 
 ```mermaid
 flowchart LR
@@ -169,5 +171,5 @@ rules for coding agents, which humans can follow too).
 
 ## License
 
-No license has been chosen yet, so no one may reuse the code. This will be
-decided before the first public release.
+Rolda is licensed under the [Apache License 2.0](LICENSE). It includes an
+express patent grant. Contributions are accepted under the same license.

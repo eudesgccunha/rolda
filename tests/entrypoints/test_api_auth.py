@@ -84,3 +84,23 @@ def test_a_short_token_is_refused_at_creation() -> None:
             spans=spans,
             token="short",  # noqa: S106 - deliberately too short
         )
+
+
+def test_the_bearer_scheme_is_case_insensitive(serve_app: ServeApp) -> None:
+    client = serve_app(_app(), TOKEN)
+
+    for scheme in ("bearer", "BEARER", "Bearer"):
+        reply = client.call(
+            "GET", "/incidents", headers={"Authorization": f"{scheme} {TOKEN}"}
+        )
+        assert reply.status == 200, scheme
+
+
+def test_other_schemes_are_rejected(serve_app: ServeApp) -> None:
+    client = serve_app(_app(), TOKEN)
+
+    reply = client.call(
+        "GET", "/incidents", headers={"Authorization": f"Basic {TOKEN}"}
+    )
+
+    assert reply.status == 401

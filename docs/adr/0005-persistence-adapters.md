@@ -18,7 +18,10 @@ Compose stack. SPEC.md plans ClickHouse for spans and PostgreSQL for state.
   `INSERT ... ON CONFLICT (trace_id, rule) DO NOTHING`.
 - Configuration comes from environment variables only (`Settings`).
   Credentials are URL-quoted when they build the PostgreSQL DSN.
-- `serve` runs contiguous windows. `python -m rolda.entrypoints` starts it.
+- `serve` runs contiguous windows and retries a failed window from the same
+  start, so a transient database error does not skip spans or end the
+  process. A restart still loses the cursor (see `docs/STATUS.md`).
+  `python -m rolda.entrypoints` starts it.
 
 ## Consequences
 

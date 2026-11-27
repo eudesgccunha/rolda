@@ -168,3 +168,69 @@ def test_webhook_url_is_trimmed() -> None:
     )
 
     assert settings.webhook_url == "https://hooks.example.com/a"
+
+
+def test_a_bad_webhook_port_is_a_settings_error() -> None:
+    with pytest.raises(SettingsError, match="ROLDA_SLACK_WEBHOOK_URL"):
+        load_settings({**ENV, "ROLDA_SLACK_WEBHOOK_URL": "http://h:80a/x"})
+
+
+@pytest.mark.parametrize(
+    "name", ["ROLDA_WINDOW_SECONDS", "ROLDA_INTERVAL_SECONDS"]
+)
+@pytest.mark.parametrize("value", ["0", "-5"])
+def test_window_and_interval_must_be_positive(name: str, value: str) -> None:
+    with pytest.raises(SettingsError, match=name):
+        load_settings({**ENV, name: value})
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "ROLDA_CLICKHOUSE_PORT",
+        "ROLDA_POSTGRES_PORT",
+    ],
+)
+@pytest.mark.parametrize("value", ["0", "70000"])
+def test_database_ports_must_be_valid(name: str, value: str) -> None:
+    with pytest.raises(SettingsError, match=name):
+        load_settings({**ENV, name: value})
+
+
+class _FlakyWorker:
+    """Fails on the first call, then works."""
+
+    def __init__(self, failures: int) -> None:
+        self._failures = failures
+        self.windows: list[tuple[datetime, datetime]] = []
+
+    async def run_window(self, start: datetime, end: datetime) -> WindowResult:
+        self.windows.append((start, end))
+        if len(self.windows) <= self._failures:
+            msg = "database is down"
+            raise ConnectionError(msg)
+        return WindowResult(traces=0, findings=0, new_incidents=0)
+
+
+def test_serve_retries_the_same_window_after_an_error() -> None:
+    clock_values = iter(
+        datetime(2026, 11, 26, 10, m, tzinfo=UTC) for m in (5, 6, 7)
+    )
+    worker = _FlakyWorker(failures=1)
+
+    async def no_sleep(seconds: float) -> None:
+        del seconds
+
+    asyncio.run(
+        serve(
+            worker,
+            load_settings(ENV),
+            clock=lambda: next(clock_values),
+            sleep=no_sleep,
+            iterations=3,
+        )
+    )
+
+    first, retry, after = worker.windows
+    assert retry[0] == first[0]
+    assert after[0] == retry[1]

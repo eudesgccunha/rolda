@@ -21,6 +21,11 @@ def _validated(url: str) -> str:
     if parts.scheme not in ("http", "https") or not parts.hostname:
         msg = "webhook URL must be http or https with a host"
         raise ValueError(msg)
+    try:
+        parts.port  # noqa: B018 - reading it validates the port
+    except ValueError as exc:
+        msg = "webhook URL has an invalid port"
+        raise ValueError(msg) from exc
     return url
 
 
@@ -47,7 +52,7 @@ def _post_json(url: str, payload: dict[str, Any], timeout: float) -> None:
         if not 200 <= response.status < 300:
             msg = f"webhook answered HTTP {response.status}"
             raise AlertDeliveryError(msg)
-    except (OSError, http.client.HTTPException) as exc:
+    except (OSError, http.client.HTTPException, ValueError) as exc:
         msg = f"webhook request failed: {type(exc).__name__}"
         raise AlertDeliveryError(msg) from exc
     finally:

@@ -125,7 +125,8 @@ def _timestamp(value: object) -> datetime:
 
 
 _ISO = re.compile(
-    r"^(?P<head>[^.]+)(?:\.(?P<frac>\d+))?(?P<zone>Z|[+-]\d{2}:?\d{2})?$"
+    r"^(?P<head>\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2})"
+    r"(?:\.(?P<frac>\d+))?(?P<zone>Z|[+-]\d{2}:?\d{2})?$"
 )
 
 

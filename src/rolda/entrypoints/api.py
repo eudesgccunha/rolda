@@ -179,8 +179,9 @@ def _bearer_check(expected: str) -> Callable[..., Awaitable[None]]:
         authorization: Annotated[str | None, Header()] = None,
     ) -> None:
         supplied = ""
-        if authorization and authorization.startswith("Bearer "):
-            supplied = authorization.removeprefix("Bearer ")
+        scheme, _, credentials = (authorization or "").partition(" ")
+        if scheme.lower() == "bearer":
+            supplied = credentials
         if not hmac.compare_digest(supplied.encode(), expected.encode()):
             raise HTTPException(
                 status_code=401,

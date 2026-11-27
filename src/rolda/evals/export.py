@@ -12,6 +12,12 @@ _EXPECTED = {
 }
 
 
+def _without_error(signature: str) -> str:
+    """Keep agent, rule and operation. Drop the error text, which is
+    untrusted trace content and is not part of an eval case."""
+    return "|".join(signature.split("|")[:3])
+
+
 def _eval_span(span: Span) -> EvalSpan:
     return EvalSpan(
         span_id=span.span_id,
@@ -44,7 +50,7 @@ async def build_cases(labels: LabelStore, spans: SpanSource) -> list[EvalCase]:
             EvalCase(
                 trace_id=incident.trace_id,
                 rule=incident.rule,
-                signature=incident.signature,
+                signature=_without_error(incident.signature),
                 label=label.verdict.value,
                 expected=expected,
                 spans=tuple(_eval_span(s) for s in ordered),

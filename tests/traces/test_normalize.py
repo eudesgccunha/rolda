@@ -126,6 +126,18 @@ def test_invalid_timestamp_raises() -> None:
             datetime(2026, 11, 26, 10, 0, 0, 123456, tzinfo=UTC),
         ),
         (
+            "2026-11-26T10:00:00Z",
+            datetime(2026, 11, 26, 10, 0, 0, tzinfo=UTC),
+        ),
+        (
+            "2026-11-26T10:00:00+02:00",
+            datetime(2026, 11, 26, 8, 0, 0, tzinfo=UTC),
+        ),
+        (
+            "2026-11-26 10:00:00",
+            datetime(2026, 11, 26, 10, 0, 0, tzinfo=UTC),
+        ),
+        (
             "2026-11-26T10:00:00.5+00:00",
             datetime(2026, 11, 26, 10, 0, 0, 500000, tzinfo=UTC),
         ),

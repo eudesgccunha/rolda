@@ -60,6 +60,7 @@ def probable_cause(trace: Trace, finding: Finding) -> ProbableCause:
             if span.status is SpanStatus.ERROR
             else ""
         )
+    agent = agent.replace("|", "_")
     signature = "|".join([agent, finding.rule, operation, error])
     where = " > ".join(path) if path else "unknown span"
     hypothesis = f"{finding.rule} at {where}: {finding.evidence}"
