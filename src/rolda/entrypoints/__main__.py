@@ -105,3 +105,7 @@ async def _serve(worker: Worker, settings: Settings, metrics: Metrics) -> None:
         )
     finally:
         await status.stop()
+
+
+if __name__ == "__main__":
+    main()
