@@ -25,6 +25,18 @@ class DetectionConfig:
     tool_loop_repeats: int = 3
     z_threshold: float = 3.5
     min_samples: int = 30
+    latency_z: float | None = None
+    span_latency_z: float | None = None
+    token_z: float | None = None
+
+    def z_for(self, rule: str) -> float:
+        """Return the z-score threshold of a rule, or the shared value."""
+        override = {
+            "latency_outlier": self.latency_z,
+            "span_latency_outlier": self.span_latency_z,
+            "token_outlier": self.token_z,
+        }.get(rule)
+        return self.z_threshold if override is None else override
 
 
 class Rule(Protocol):
@@ -120,7 +132,7 @@ def _outlier(
     if value is None or len(history) < config.min_samples:
         return ()
     score = robust_z(value, history)
-    if score is None or score <= config.z_threshold:
+    if score is None or score <= config.z_for(rule):
         return ()
     return (
         Finding(
@@ -204,7 +216,7 @@ class SpanLatencyOutlier:
             score = robust_z(
                 _log(float(span.duration_ns)), [_log(h) for h in history]
             )
-            if score is None or score <= self._config.z_threshold:
+            if score is None or score <= self._config.z_for(self.name):
                 continue
             if worst is None or score > worst[0]:
                 worst = (score, span)

@@ -87,3 +87,26 @@ def test_only_the_worst_span_is_reported(make_span: SpanFactory) -> None:
     findings = SpanLatencyOutlier(DetectionConfig()).evaluate(both, baseline)
 
     assert len(findings) == 1
+
+
+def test_rule_has_its_own_threshold(make_span: SpanFactory) -> None:
+    baseline = _baseline(make_span, 60)
+    mild = build_traces(
+        _trace(make_span, "x", int(8_900_000 * 1.5), 3_269_000)
+    )[0]
+
+    default = SpanLatencyOutlier(DetectionConfig()).evaluate(mild, baseline)
+    strict = SpanLatencyOutlier(DetectionConfig(span_latency_z=0.5)).evaluate(
+        mild, baseline
+    )
+
+    assert default == ()
+    assert [f.span_id for f in strict] == ["chat"]
+
+
+def test_threshold_falls_back_to_the_shared_value() -> None:
+    config = DetectionConfig(z_threshold=4.0, token_z=2.5)
+
+    assert config.z_for("token_outlier") == 2.5
+    assert config.z_for("latency_outlier") == 4.0
+    assert config.z_for("span_latency_outlier") == 4.0
