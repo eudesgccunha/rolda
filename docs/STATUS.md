@@ -84,10 +84,14 @@ proven, what is not, and what is needed to close the gap.
   nobody can legally reuse the code.
 - [ ] Set the license in `pyproject.toml` and the README.
 - [ ] Enable private vulnerability reporting on GitHub (see
-  [SECURITY.md](../SECURITY.md)).
-- [ ] Decide whether to add a code of conduct.
-- [ ] Merge `develop` into `main` and protect `main`.
-- [ ] Check the CI result of the last commit.
+  [SECURITY.md](../SECURITY.md) and [CODE_OF_CONDUCT.md](../CODE_OF_CONDUCT.md),
+  which both point at it). GitHub offers it only on public repositories or
+  paid plans, so do it the moment the repository goes public.
+- [ ] Protect `main` (require a pull request and the `checks` status check,
+  block force pushes and deletion). GitHub offers it only on public
+  repositories or paid plans.
+- [x] Code of conduct added (Contributor Covenant 2.1).
+- [x] `develop` merged into `main`.
 
 ## Differences from the original plan
 

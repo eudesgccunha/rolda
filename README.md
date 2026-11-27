@@ -156,7 +156,8 @@ uv run pytest                    # unit tests
 uv run pytest -m integration     # needs the Compose stack and its env vars
 ```
 
-Read [CONTRIBUTING.md](CONTRIBUTING.md) and [AGENTS.md](AGENTS.md) (the
+Read [CONTRIBUTING.md](CONTRIBUTING.md), the
+[Code of Conduct](CODE_OF_CONDUCT.md) and [AGENTS.md](AGENTS.md) (the
 rules for coding agents, which humans can follow too).
 
 ## Documentation

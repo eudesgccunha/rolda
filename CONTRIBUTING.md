@@ -4,6 +4,8 @@ Thanks for your interest. Rolda is pre-release, so the most useful
 contributions right now are bug reports, traces from real agents (with
 content removed) and small, well-tested changes.
 
+This project follows the [Code of Conduct](CODE_OF_CONDUCT.md).
+
 ## Set up
 
 You need Python 3.12 or newer, [uv](https://docs.astral.sh/uv/) and, for the
