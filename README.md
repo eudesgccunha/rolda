@@ -59,6 +59,24 @@ must be an http or https URL:
 Webhook URLs hold secrets. Keep them in the environment, never in the
 repository. Rolda does not log them.
 
+### Detection thresholds
+
+The outlier rules use a robust z-score. The defaults come from runs on
+simulated data (see `docs/adr/0009-redundant-outliers-and-span-latency.md`).
+Re-check them on your own traces. All variables are optional; an invalid
+value stops the worker at start.
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `ROLDA_Z_THRESHOLD` | 3.5 | Shared threshold, also used by the whole-trace latency rule |
+| `ROLDA_Z_LATENCY` | shared | Whole-trace latency rule only |
+| `ROLDA_Z_SPAN_LATENCY` | 3.0 | Slow model or tool call |
+| `ROLDA_Z_TOKENS` | 2.5 | Token usage of a trace |
+| `ROLDA_MIN_SAMPLES` | 30 | History needed before an outlier rule runs (at least 1) |
+| `ROLDA_TOOL_LOOP_REPEATS` | 3 | Same tool and arguments this many times is a loop (at least 2) |
+
+Lower values catch more and raise more false alarms.
+
 ## Labeling and evals
 
 Label an incident, then export the labeled set as a regression file:

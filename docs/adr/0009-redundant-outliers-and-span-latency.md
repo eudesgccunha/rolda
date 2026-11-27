@@ -81,5 +81,7 @@ human-labeled traces before trusting them.
 - Recall is now about 70-90% on injected outliers, with at most 1 false
   alarm in 300 healthy sessions. It still misses faults close to normal
   variation.
-- Next: consider a per-span token rule, and make thresholds settable from
-  the environment.
+- Thresholds are settable from the environment (`ROLDA_Z_*`,
+  `ROLDA_MIN_SAMPLES`, `ROLDA_TOOL_LOOP_REPEATS`). Invalid values stop the
+  worker at start. Only the calibrated defaults are tested against data.
+- Next: consider a per-span token rule.

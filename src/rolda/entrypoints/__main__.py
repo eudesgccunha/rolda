@@ -14,7 +14,7 @@ from rolda.adapters.webhook import (
     WebhookAlerter,
 )
 from rolda.alerts import Alerter
-from rolda.detection import DetectionConfig, default_rules
+from rolda.detection import default_rules
 from rolda.entrypoints.settings import load_settings
 from rolda.entrypoints.worker import Worker, WorkerConfig, serve
 
@@ -36,7 +36,7 @@ def main() -> None:
     worker = Worker(
         source=ClickHouseSpanSource(settings),
         store=PostgresIncidentStore(settings.postgres_dsn),
-        rules=default_rules(DetectionConfig()),
+        rules=default_rules(settings.detection),
         config=WorkerConfig(),
         alerters=alerters,
     )
