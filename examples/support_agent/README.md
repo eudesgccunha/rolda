@@ -47,3 +47,11 @@ through the same environment variables as the worker:
 - `label_from_truth.py TRUTH.jsonl`: labels incidents from the truth. These
   are **not** human labels: use them to test the plumbing, not to measure
   the judge.
+
+## Kill test
+
+`chaos.sh LOGFILE` kills the leader worker three times, 70 seconds apart,
+while a batch runs. Start two workers first
+(`docker compose --profile app up -d --scale worker=2`), run a batch with
+`--truth`, and compare the incidents with the truth afterwards. A worker that
+recovers correctly loses no incident and creates no duplicate.

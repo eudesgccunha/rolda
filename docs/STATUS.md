@@ -15,7 +15,7 @@ proven, what is not, and what is needed to close the gap.
 | Detection (6 rules) | Working, thresholds calibrated on **simulated** data only |
 | Incidents, probable cause, idempotent storage | Working, verified on PostgreSQL |
 | Alerts (webhook, Slack, Google Chat, Teams) | Working, payloads verified against a real HTTP receiver; **not** rendered in real chat apps. Failed deliveries are retried per channel (outbox, M8a) |
-| Worker resilience (checkpoint, leader lock, whole traces, migrations, probes, metrics) | M8a implemented; the database adapters pass integration tests on the real stack; the running worker process and a kill-and-recover test are **not yet verified**, see below |
+| Worker resilience (checkpoint, leader lock, whole traces, migrations, probes, metrics) | M8a implemented and verified on Docker Compose: integration tests pass and a kill test lost nothing. Not run on Kubernetes or under load |
 | Labels and eval export (JSONL) | Working |
 | Judge adapter (Anthropic) and kappa measurement | Implemented and tested against a fake API; **never run against the real API**; **no kappa published** |
 | HTTP API (bearer token) | Working, verified on the real stores |
@@ -31,6 +31,12 @@ proven, what is not, and what is needed to close the gap.
   16, including migrations on both databases, the checkpoint, the leader lock,
   the alert outbox and reading spans by trace id.
 - **Static checks:** `ruff` (format and lint), `mypy --strict`, `bandit`.
+- **Kill test (2026-11-27):** a 300-session run with ground truth while the
+  leader worker was killed three times. Result: 19 of 19 timeouts, 14 of 14
+  rate limits, 10 of 10 loops and 5 of 5 token blowups found, 5 of 8 latency
+  outliers found, 0 of 244 healthy sessions flagged and 0 duplicate incidents.
+  The simulated agent injected the faults, so these numbers show recovery, not
+  production quality.
 - **Simulated agent:** `examples/support_agent` sends OpenTelemetry traces
   from a small agent whose **model is simulated** (no API key) and whose
   tools and control flow are real code. Four runs with ground truth
@@ -38,14 +44,13 @@ proven, what is not, and what is needed to close the gap.
 
 ## What is not proven
 
-0. **The M8a worker as a running process.** The database adapters behind it
-   (migrations, checkpoint, leader lock, alert outbox, spans by trace id) pass
-   integration tests on the real PostgreSQL and ClickHouse. What nobody has
-   shown yet is the worker container running the whole loop against real
-   traffic, taking over from a killed worker, and losing no incident. An
-   earlier build of the worker exited at start because a `__main__` guard had
-   been deleted by mistake; `tests/entrypoints/test_entrypoints_run.py` now
-   runs each entry point as a real program so that cannot recur unnoticed.
+0. **Kubernetes and long runs.** The worker survived a kill test on one
+   developer machine (Docker Compose, two replicas): during a 300-session run
+   the leader was killed three times. Windows stayed contiguous, no incident
+   was lost or duplicated, and recall on errors, loops and token outliers was
+   unchanged (see below). Stopping the leader without a restart moved the work
+   to the standby in 29 seconds. This was **not** run on Kubernetes, for
+   hours, under load, or with the databases failing.
 
 1. **Real agent traffic.** Every trace so far comes from fixtures or the
    simulated agent. Thresholds, false-alarm rates and recall on real
@@ -176,6 +181,6 @@ The plan is in [SPEC.md](SPEC.md).
 | M5 Labels and eval export | Done |
 | M6 Judge adapter | Adapter and kappa tooling done; **kappa not measured** |
 | M7 HTTP API (added) | Done |
-| M8a Worker resilience (added) | Implemented; adapters verified on the real stack; worker process and kill test pending |
+| M8a Worker resilience (added) | Done, verified on Docker Compose |
 | M8b Scale (baseline in ClickHouse, pool, load test) | Not started |
 | M8c Kubernetes (sharding, manifests, chaos test) | Not started |
