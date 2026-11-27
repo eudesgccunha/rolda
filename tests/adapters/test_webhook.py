@@ -124,3 +124,13 @@ def test_unreachable_server_raises_delivery_error() -> None:
 def test_only_http_urls_with_a_host_are_accepted(url: str) -> None:
     with pytest.raises(ValueError, match="webhook URL"):
         WebhookAlerter(url)
+
+
+def test_a_bad_port_is_rejected_when_the_alerter_is_built() -> None:
+    with pytest.raises(ValueError, match="port"):
+        WebhookAlerter("http://hooks.example:80a/x")
+
+
+def test_a_non_ascii_path_becomes_a_delivery_error(server: str) -> None:
+    with pytest.raises(AlertDeliveryError):
+        asyncio.run(WebhookAlerter(server + "/caf\u00e9").send(_alert()))

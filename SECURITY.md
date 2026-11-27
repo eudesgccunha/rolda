@@ -23,7 +23,8 @@ yet.
   text. Rolda stores and returns it as data, never runs it, and gives it to
   the judge only inside delimited blocks, with a validated answer.
 - Prompt and response capture is off by default and is not part of the
-  data model.
+  data model. A span's error message is stored in the incident and returned
+  by alerts and the API without redaction. Evals and the judge never get it.
 - The API needs a bearer token and does not start without one. It is bound
   to `127.0.0.1` by default. Use TLS in front of it.
 - The OTLP receiver and the databases have no network authentication. The

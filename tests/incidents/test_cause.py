@@ -120,3 +120,26 @@ def test_normalized_error_is_truncated_and_has_no_separator() -> None:
 
     assert len(result) <= 80
     assert "|" not in result
+
+
+def test_a_pipe_in_the_agent_name_does_not_break_the_signature(
+    make_span: SpanFactory,
+) -> None:
+    trace = build_traces(
+        [
+            make_span("root", operation=Operation.AGENT, agent="billing|v2"),
+            make_span(
+                "tool",
+                parent="root",
+                operation=Operation.TOOL,
+                status=SpanStatus.ERROR,
+                agent="billing|v2",
+            ),
+        ]
+    )[0]
+    [finding] = SpanError().evaluate(trace, EMPTY)
+
+    signature = probable_cause(trace, finding).signature
+
+    assert len(signature.split("|")) == 4
+    assert signature.split("|")[0] == "billing_v2"

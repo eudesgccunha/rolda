@@ -8,6 +8,7 @@ from collections.abc import Callable, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 
+from rolda.entrypoints.settings import SettingsError
 from rolda.evals import (
     EvalCase,
     EvalFormatError,
@@ -106,9 +107,9 @@ def _judge_eval(args: argparse.Namespace, judge: Judge | None) -> int:
 
 def _default_label_store() -> LabelStore:
     from rolda.adapters.postgres import PostgresLabelStore
-    from rolda.entrypoints.settings import load_settings
+    from rolda.entrypoints.settings import load_postgres_dsn
 
-    return PostgresLabelStore(load_settings(os.environ).postgres_dsn)
+    return PostgresLabelStore(load_postgres_dsn(os.environ))
 
 
 def _default_span_source() -> SpanSource:
@@ -185,11 +186,15 @@ def main(
 ) -> int:
     """Run one command. Return the process exit code."""
     args = _parser().parse_args(argv)
-    if args.command == "label":
-        return _label(args, label_store, clock)
-    if args.command == "judge-eval":
-        return _judge_eval(args, judge)
-    return _export(args, label_store, span_source)
+    try:
+        if args.command == "label":
+            return _label(args, label_store, clock)
+        if args.command == "judge-eval":
+            return _judge_eval(args, judge)
+        return _export(args, label_store, span_source)
+    except SettingsError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
 
 
 if __name__ == "__main__":

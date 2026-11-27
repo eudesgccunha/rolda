@@ -182,3 +182,12 @@ def test_export_command_force_overwrites(
     assert code == 0
     assert out.read_text(encoding="utf-8") != "old"
     assert out.stat().st_mode & 0o777 == 0o600
+
+
+def test_exported_signature_has_no_error_text(make_span: SpanFactory) -> None:
+    labels, spans = _world(make_span, {"t1": Verdict.FAILURE})
+
+    [case] = asyncio.run(build_cases(labels, spans))
+
+    assert case.signature == "agent-a|span_error|tool"
+    assert "boom" not in case.signature

@@ -160,21 +160,34 @@ async def serve(
     sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
     iterations: int | None = None,
 ) -> None:
-    """Run contiguous windows forever, or ``iterations`` times."""
-    previous_end: datetime | None = None
+    """Run contiguous windows forever, or ``iterations`` times.
+
+    A failed window is logged and retried from the same start, so an outage
+    of the databases or a bad window does not skip spans or end the process.
+    """
+    cursor: datetime | None = None
     count = 0
     while iterations is None or count < iterations:
         end = clock()
-        start = previous_end or end - settings.window
-        result = await worker.run_window(start, end)
-        logger.info(
-            "window %s..%s traces=%d findings=%d new_incidents=%d",
-            start.isoformat(),
-            end.isoformat(),
-            result.traces,
-            result.findings,
-            result.new_incidents,
-        )
-        previous_end = end
+        start = cursor or end - settings.window
+        try:
+            result = await worker.run_window(start, end)
+        except Exception:
+            logger.exception(
+                "window %s..%s failed; retrying",
+                start.isoformat(),
+                end.isoformat(),
+            )
+            cursor = start
+        else:
+            logger.info(
+                "window %s..%s traces=%d findings=%d new_incidents=%d",
+                start.isoformat(),
+                end.isoformat(),
+                result.traces,
+                result.findings,
+                result.new_incidents,
+            )
+            cursor = end
         count += 1
         await sleep(settings.interval.total_seconds())

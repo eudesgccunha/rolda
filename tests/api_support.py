@@ -34,19 +34,21 @@ class ApiClient:
         body: object | None = None,
         token: str | None = None,
         send_token: bool = True,
+        headers: dict[str, str] | None = None,
     ) -> Reply:
         """Send one request. By default it carries the valid token."""
-        headers = {"Content-Type": "application/json"}
+        sent = {"Content-Type": "application/json"}
         chosen = token if token is not None else self._token
-        if send_token and chosen is not None:
-            headers["Authorization"] = f"Bearer {chosen}"
+        if send_token and chosen is not None and not headers:
+            sent["Authorization"] = f"Bearer {chosen}"
+        sent.update(headers or {})
         conn = http.client.HTTPConnection("127.0.0.1", self._port, timeout=10)
         try:
             conn.request(
                 method,
                 path,
                 body=None if body is None else json.dumps(body),
-                headers=headers,
+                headers=sent,
             )
             response = conn.getresponse()
             return Reply(
