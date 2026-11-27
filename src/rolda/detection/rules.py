@@ -20,14 +20,17 @@ from rolda.traces import Operation, Span, SpanStatus, Trace
 
 @dataclass(frozen=True, slots=True)
 class DetectionConfig:
-    """Starting thresholds. Calibrate them with real data."""
+    """Thresholds, calibrated on simulated runs (ADR 0009).
+
+    Re-check them with real, human-labeled traces.
+    """
 
     tool_loop_repeats: int = 3
     z_threshold: float = 3.5
     min_samples: int = 30
     latency_z: float | None = None
-    span_latency_z: float | None = None
-    token_z: float | None = None
+    span_latency_z: float | None = 3.0
+    token_z: float | None = 2.5
 
     def z_for(self, rule: str) -> float:
         """Return the z-score threshold of a rule, or the shared value."""

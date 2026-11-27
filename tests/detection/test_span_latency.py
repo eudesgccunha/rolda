@@ -105,8 +105,16 @@ def test_rule_has_its_own_threshold(make_span: SpanFactory) -> None:
 
 
 def test_threshold_falls_back_to_the_shared_value() -> None:
-    config = DetectionConfig(z_threshold=4.0, token_z=2.5)
+    config = DetectionConfig(z_threshold=4.0, token_z=2.5, span_latency_z=None)
 
     assert config.z_for("token_outlier") == 2.5
     assert config.z_for("latency_outlier") == 4.0
     assert config.z_for("span_latency_outlier") == 4.0
+
+
+def test_defaults_use_the_calibrated_thresholds() -> None:
+    config = DetectionConfig()
+
+    assert config.z_for("span_latency_outlier") == 3.0
+    assert config.z_for("token_outlier") == 2.5
+    assert config.z_for("latency_outlier") == 3.5
