@@ -3,6 +3,7 @@
 import asyncio
 import logging
 import os
+import sys
 from collections.abc import Callable
 
 from rolda.adapters.clickhouse import ClickHouseSpanSource
@@ -15,14 +16,18 @@ from rolda.adapters.webhook import (
 )
 from rolda.alerts import Alerter
 from rolda.detection import default_rules
-from rolda.entrypoints.settings import load_settings
+from rolda.entrypoints.settings import SettingsError, load_settings
 from rolda.entrypoints.worker import Worker, WorkerConfig, serve
 
 
 def main() -> None:
     """Wire the adapters and run the worker loop."""
     logging.basicConfig(level=logging.INFO)
-    settings = load_settings(os.environ)
+    try:
+        settings = load_settings(os.environ)
+    except SettingsError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        raise SystemExit(2) from exc
     alerters: list[Alerter] = []
     channels: list[tuple[str | None, Callable[[str], Alerter]]] = [
         (settings.webhook_url, WebhookAlerter),
