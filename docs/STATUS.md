@@ -14,7 +14,8 @@ proven, what is not, and what is needed to close the gap.
 | Normalization and domain model | Working |
 | Detection (6 rules) | Working, thresholds calibrated on **simulated** data only |
 | Incidents, probable cause, idempotent storage | Working, verified on PostgreSQL |
-| Alerts (webhook, Slack, Google Chat, Teams) | Working, payloads verified against a real HTTP receiver; **not** rendered in real chat apps |
+| Alerts (webhook, Slack, Google Chat, Teams) | Working, payloads verified against a real HTTP receiver; **not** rendered in real chat apps. Failed deliveries are retried per channel (outbox, M8a) |
+| Worker resilience (checkpoint, leader lock, whole traces, migrations, probes, metrics) | M8a implemented and unit-tested; **not yet run on the real stack**, see below |
 | Labels and eval export (JSONL) | Working |
 | Judge adapter (Anthropic) and kappa measurement | Implemented and tested against a fake API; **never run against the real API**; **no kappa published** |
 | HTTP API (bearer token) | Working, verified on the real stores |
@@ -23,10 +24,12 @@ proven, what is not, and what is needed to close the gap.
 
 ## How each claim was checked
 
-- **Unit tests:** 228, run on every push by CI (Python 3.12).
-- **Integration tests:** 10, against the Compose stack (ClickHouse,
+- **Unit tests:** 311, run on every push by CI (Python 3.12).
+- **Integration tests:** 16, against the Compose stack (ClickHouse,
   PostgreSQL, Collector). Run by hand with `uv run pytest -m integration`.
-  CI does not run them.
+  CI does not run them. The last full run was 10 tests, **before** M8a. The 6
+  tests added for M8a (migrations, checkpoint, leader lock, alert outbox,
+  reading spans by trace id) have not been run yet.
 - **Static checks:** `ruff` (format and lint), `mypy --strict`, `bandit`.
 - **Simulated agent:** `examples/support_agent` sends OpenTelemetry traces
   from a small agent whose **model is simulated** (no API key) and whose
@@ -34,6 +37,12 @@ proven, what is not, and what is needed to close the gap.
   (300 to 400 sessions each) were used to measure and tune the rules.
 
 ## What is not proven
+
+0. **The M8a worker changes on the real stack.** Migrations 004 and 005, the
+   checkpoint, the leader lock, the alert outbox, whole-trace evaluation and
+   the status server pass their unit tests with in-memory fakes. Nobody has
+   run them against the real PostgreSQL and ClickHouse yet, nor killed a
+   worker while it ran. Treat them as unverified until that is done.
 
 1. **Real agent traffic.** Every trace so far comes from fixtures or the
    simulated agent. Thresholds, false-alarm rates and recall on real
@@ -60,23 +69,24 @@ proven, what is not, and what is needed to close the gap.
   text from your agent and is **not redacted**: it can contain data. The
   eval export and the judge do not receive it. Only the agent, rule and
   operation of the signature leave the database.
-- **Long traces are cut by the window.** The worker reads spans by start
-  time, so a trace longer than the window lag (2 minutes) may be judged
-  without its root span.
-- **No checkpoint.** The worker keeps the end of its last window in memory.
-  After a restart it resumes at "now minus the window", so an outage longer
-  than the window (5 minutes) leaves those traces unanalyzed. A failed
-  window inside a running worker is retried.
-- **A MAD of zero turns an outlier rule off** for that group, as the plan
-  says. A span that always uses exactly the same tokens never alerts, even
-  on an extreme value.
+- **Partial traces can still be judged.** The worker waits up to `lag`
+  (10 minutes) for a trace's root span. A trace that runs longer than that
+  can be judged early. Errors and loops only grow with more spans, but an
+  outlier rule may score such a trace by a partial duration.
+- **A restart can repeat work.** The cursor is saved after each window, so a
+  restart resumes from it and an outage up to 24 hours is caught up. A longer
+  outage skips the oldest part and logs it. A worker killed between saving
+  and checkpointing repeats one window, which is safe because incidents are
+  idempotent.
+- **Alerts are at least once per channel.** A killed worker can send the same
+  alert twice. A channel that never works is dropped after 5 attempts.
+- **A history with no spread uses a 5% floor** (ADR 0015). That number is a
+  judgment, not a measurement.
 
 - One shared bearer token for the API. No users, roles or rate limiting.
   Put TLS in front before exposing it.
 - The OTLP receiver has no authentication. The Compose file binds it to
   `127.0.0.1`.
-- Alert delivery is not retried; a failure is logged and dropped
-  ([ADR 0006](adr/0006-alerts-and-probable-cause.md)).
 - The in-memory adapters exist next to the real ones, for tests.
 - No call ceiling for the judge, and no check that the judge model differs
   from the agent's model.
@@ -89,26 +99,29 @@ proven, what is not, and what is needed to close the gap.
 Measured on one core: normalizing runs at about 117,000 spans per second and
 a retained span takes about 442 bytes. CPU is not the limit.
 
-The limits are the architecture:
+Done in M8a: a checkpoint and a leader lock (so a second replica is a hot
+standby, not a duplicate), whole-trace evaluation, versioned migrations, a
+readiness probe, worker health and Prometheus metrics, and an alert outbox.
 
-- The worker loads the 7-day baseline as Python objects every hour. By that
-  measurement, 10 spans per second needs roughly 3 GB for the baseline alone
-  and 100 spans per second roughly 27 GB (an estimate, and it ignores the raw
-  rows held at the same time). The baseline should be computed inside
+Still limits, planned for M8b and M8c:
+
+- The worker loads the 7-day baseline as Python objects every hour. By the
+  measurement above, 10 spans per second needs roughly 3 GB for the baseline
+  alone and 100 spans per second roughly 27 GB (an estimate, and it ignores
+  the raw rows held at the same time). The baseline should be computed inside
   ClickHouse instead.
-- Extra worker replicas repeat the same work. They are safe (one winner
-  writes and alerts) but do not add throughput. Scaling out needs a
-  partition by trace id.
-- The databases are single nodes, there are no schema migrations at run
-  time, the API has no readiness check on the databases and the project has
-  no `/metrics`.
-- The Collector queue is in memory, so a killed pod loses its batch.
-- There are no Kubernetes manifests or Helm chart yet.
+- Only the leader works, so extra replicas add availability, not throughput.
+  Scaling out needs a partition by trace id.
+- Every database call opens its own connection, and the `agent` filter of the
+  API has no index.
+- The databases are single nodes, and the Collector queue is in memory, so a
+  killed Collector pod loses its batch.
+- There are no Kubernetes manifests or Helm chart yet, and no load test.
 
 Fine for a small deployment (a few spans per second). Not ready for high
-volume. The planned next step (M8) is a Postgres checkpoint, computing the
-baseline in ClickHouse, evaluating whole traces, readiness probes and
-metrics, versioned migrations and a connection pool.
+volume. The plan for the rest of M8 is in the project history: baseline in
+ClickHouse, a connection pool, a load test, sharding, manifests and a chaos
+test.
 
 ## What is needed to move forward
 
@@ -117,21 +130,19 @@ metrics, versioned migrations and a connection pool.
 | Measure the judge (kappa) | An agent in real use, and about 30 incidents labeled by a human, plus an `ANTHROPIC_API_KEY` |
 | Calibrate thresholds | Traces from a real agent over several days |
 | Check alert rendering | A webhook URL for a test channel (a free Slack workspace is enough) |
-| Make the repository public | A license file (see below) and a decision to publish |
 
-## Before making the repository public
+## Repository hardening
 
-- [x] License chosen: Apache-2.0 (`LICENSE`, `NOTICE`, `pyproject.toml`,
-  README). It includes a patent grant.
-- [ ] Enable private vulnerability reporting on GitHub (see
-  [SECURITY.md](../SECURITY.md) and [CODE_OF_CONDUCT.md](../CODE_OF_CONDUCT.md),
-  which both point at it). GitHub offers it only on public repositories or
-  paid plans, so do it the moment the repository goes public.
-- [ ] Protect `main` (require a pull request and the `checks` status check,
-  block force pushes and deletion). GitHub offers it only on public
-  repositories or paid plans.
-- [x] Code of conduct added (Contributor Covenant 2.1).
-- [x] `develop` merged into `main`.
+- [x] Apache-2.0 license, code of conduct, security policy.
+- [x] Repository public, `develop` merged into `main`.
+- [x] `main` protected: pull request and `checks (3.12)` required, no force
+  push or deletion, administrators included.
+- [x] Private vulnerability reporting, secret scanning and push protection on.
+- [x] Actions pinned by SHA (enforced), `zizmor` and `pip-audit` in CI,
+  Dependabot with a 7 day cooldown, CodeQL, `CODEOWNERS`.
+- [ ] Two-factor authentication with a passkey or hardware key, and narrow,
+  short-lived tokens, on the maintainer's account. GitHub does not expose this
+  to the project, so it is unverified here.
 
 ## Differences from the original plan
 
@@ -144,6 +155,7 @@ The plan is in [SPEC.md](SPEC.md).
   `span_token_outlier`. Redundant outliers are dropped when a trace
   already has an error or a loop.
 - Thresholds can be set per rule from the environment.
+- M8 (worker resilience, scale, Kubernetes) was added after the plan.
 - An HTTP API and a container image were built, which the plan placed
   after the MVP milestones.
 - The judge's call ceiling and the model-family preference from the plan
@@ -161,3 +173,6 @@ The plan is in [SPEC.md](SPEC.md).
 | M5 Labels and eval export | Done |
 | M6 Judge adapter | Adapter and kappa tooling done; **kappa not measured** |
 | M7 HTTP API (added) | Done |
+| M8a Worker resilience (added) | Implemented, unit-tested; real-stack run pending |
+| M8b Scale (baseline in ClickHouse, pool, load test) | Not started |
+| M8c Kubernetes (sharding, manifests, chaos test) | Not started |
