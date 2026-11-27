@@ -1,0 +1,1178 @@
+[
+  {
+    "Timestamp": "2026-11-26T14:35:55.669534070",
+    "TraceId": "54daf7417649852d7c0780c4894492c6",
+    "SpanId": "f23f7363ef7c5073",
+    "ParentSpanId": "",
+    "SpanName": "invoke_agent support-agent",
+    "SpanKind": "Internal",
+    "ServiceName": "rolda-demo-agents",
+    "ResourceAttributes": {
+      "telemetry.sdk.language": "python",
+      "telemetry.sdk.name": "opentelemetry",
+      "telemetry.sdk.version": "1.45.2",
+      "service.instance.id": "a3e503ac-68d1-4169-aeaf-2fdbda17e4e8",
+      "service.name": "rolda-demo-agents",
+      "service.version": "0.1.0",
+      "deployment.environment": "fixtures"
+    },
+    "SpanAttributes": {
+      "gen_ai.operation.name": "invoke_agent",
+      "gen_ai.agent.name": "support-agent"
+    },
+    "Duration": 501627393,
+    "StatusCode": "Unset",
+    "StatusMessage": ""
+  },
+  {
+    "Timestamp": "2026-11-26T14:35:55.669583912",
+    "TraceId": "54daf7417649852d7c0780c4894492c6",
+    "SpanId": "e65646b853f587be",
+    "ParentSpanId": "f23f7363ef7c5073",
+    "SpanName": "chat stub-model-1",
+    "SpanKind": "Client",
+    "ServiceName": "rolda-demo-agents",
+    "ResourceAttributes": {
+      "telemetry.sdk.language": "python",
+      "telemetry.sdk.name": "opentelemetry",
+      "telemetry.sdk.version": "1.45.2",
+      "service.instance.id": "a3e503ac-68d1-4169-aeaf-2fdbda17e4e8",
+      "service.name": "rolda-demo-agents",
+      "service.version": "0.1.0",
+      "deployment.environment": "fixtures"
+    },
+    "SpanAttributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "stub",
+      "gen_ai.request.model": "stub-model-1",
+      "gen_ai.response.model": "stub-model-1",
+      "gen_ai.usage.input_tokens": "437",
+      "gen_ai.usage.output_tokens": "45",
+      "gen_ai.response.finish_reasons": "stop"
+    },
+    "Duration": 180236702,
+    "StatusCode": "Unset",
+    "StatusMessage": ""
+  },
+  {
+    "Timestamp": "2026-11-26T14:35:55.850105306",
+    "TraceId": "54daf7417649852d7c0780c4894492c6",
+    "SpanId": "4e2522dbb9ecd730",
+    "ParentSpanId": "f23f7363ef7c5073",
+    "SpanName": "execute_tool get_customer",
+    "SpanKind": "Internal",
+    "ServiceName": "rolda-demo-agents",
+    "ResourceAttributes": {
+      "telemetry.sdk.language": "python",
+      "telemetry.sdk.name": "opentelemetry",
+      "telemetry.sdk.version": "1.45.2",
+      "service.instance.id": "a3e503ac-68d1-4169-aeaf-2fdbda17e4e8",
+      "service.name": "rolda-demo-agents",
+      "service.version": "0.1.0",
+      "deployment.environment": "fixtures"
+    },
+    "SpanAttributes": {
+      "gen_ai.operation.name": "execute_tool",
+      "gen_ai.tool.name": "get_customer",
+      "gen_ai.tool.type": "function",
+      "gen_ai.tool.call.arguments": "{\"customer_id\": \"c-101\"}"
+    },
+    "Duration": 30180289,
+    "StatusCode": "Unset",
+    "StatusMessage": ""
+  },
+  {
+    "Timestamp": "2026-11-26T14:35:55.880561485",
+    "TraceId": "54daf7417649852d7c0780c4894492c6",
+    "SpanId": "8ca37380bec65f7c",
+    "ParentSpanId": "f23f7363ef7c5073",
+    "SpanName": "execute_tool search_orders",
+    "SpanKind": "Internal",
+    "ServiceName": "rolda-demo-agents",
+    "ResourceAttributes": {
+      "telemetry.sdk.language": "python",
+      "telemetry.sdk.name": "opentelemetry",
+      "telemetry.sdk.version": "1.45.2",
+      "service.instance.id": "a3e503ac-68d1-4169-aeaf-2fdbda17e4e8",
+      "service.name": "rolda-demo-agents",
+      "service.version": "0.1.0",
+      "deployment.environment": "fixtures"
+    },
+    "SpanAttributes": {
+      "gen_ai.operation.name": "execute_tool",
+      "gen_ai.tool.name": "search_orders",
+      "gen_ai.tool.type": "function",
+      "gen_ai.tool.call.arguments": "{\"customer_id\": \"c-101\"}"
+    },
+    "Duration": 50198062,
+    "StatusCode": "Unset",
+    "StatusMessage": ""
+  },
+  {
+    "Timestamp": "2026-11-26T14:35:55.930995752",
+    "TraceId": "54daf7417649852d7c0780c4894492c6",
+    "SpanId": "d44c5a13bea696ca",
+    "ParentSpanId": "f23f7363ef7c5073",
+    "SpanName": "chat stub-model-1",
+    "SpanKind": "Client",
+    "ServiceName": "rolda-demo-agents",
+    "ResourceAttributes": {
+      "telemetry.sdk.language": "python",
+      "telemetry.sdk.name": "opentelemetry",
+      "telemetry.sdk.version": "1.45.2",
+      "service.instance.id": "a3e503ac-68d1-4169-aeaf-2fdbda17e4e8",
+      "service.name": "rolda-demo-agents",
+      "service.version": "0.1.0",
+      "deployment.environment": "fixtures"
+    },
+    "SpanAttributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "stub",
+      "gen_ai.request.model": "stub-model-1",
+      "gen_ai.response.model": "stub-model-1",
+      "gen_ai.usage.input_tokens": "761",
+      "gen_ai.usage.output_tokens": "97",
+      "gen_ai.response.finish_reasons": "stop"
+    },
+    "Duration": 240128671,
+    "StatusCode": "Unset",
+    "StatusMessage": ""
+  },
+  {
+    "Timestamp": "2026-11-26T14:35:56.171242097",
+    "TraceId": "14e1b0c2e5779098cf708d7988b76aed",
+    "SpanId": "1a17865437d5167d",
+    "ParentSpanId": "",
+    "SpanName": "invoke_agent support-agent",
+    "SpanKind": "Internal",
+    "ServiceName": "rolda-demo-agents",
+    "ResourceAttributes": {
+      "telemetry.sdk.language": "python",
+      "telemetry.sdk.name": "opentelemetry",
+      "telemetry.sdk.version": "1.45.2",
+      "service.instance.id": "a3e503ac-68d1-4169-aeaf-2fdbda17e4e8",
+      "service.name": "rolda-demo-agents",
+      "service.version": "0.1.0",
+      "deployment.environment": "fixtures"
+    },
+    "SpanAttributes": {
+      "gen_ai.operation.name": "invoke_agent",
+      "gen_ai.agent.name": "support-agent"
+    },
+    "Duration": 571804634,
+    "StatusCode": "Unset",
+    "StatusMessage": ""
+  },
+  {
+    "Timestamp": "2026-11-26T14:35:56.171288622",
+    "TraceId": "14e1b0c2e5779098cf708d7988b76aed",
+    "SpanId": "99689955eece4af3",
+    "ParentSpanId": "1a17865437d5167d",
+    "SpanName": "chat stub-model-1",
+    "SpanKind": "Client",
+    "ServiceName": "rolda-demo-agents",
+    "ResourceAttributes": {
+      "telemetry.sdk.language": "python",
+      "telemetry.sdk.name": "opentelemetry",
+      "telemetry.sdk.version": "1.45.2",
+      "service.instance.id": "a3e503ac-68d1-4169-aeaf-2fdbda17e4e8",
+      "service.name": "rolda-demo-agents",
+      "service.version": "0.1.0",
+      "deployment.environment": "fixtures"
+    },
+    "SpanAttributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "stub",
+      "gen_ai.request.model": "stub-model-1",
+      "gen_ai.response.model": "stub-model-1",
+      "gen_ai.usage.input_tokens": "474",
+      "gen_ai.usage.output_tokens": "50",
+      "gen_ai.response.finish_reasons": "stop"
+    },
+    "Duration": 210273345,
+    "StatusCode": "Unset",
+    "StatusMessage": ""
+  },
+  {
+    "Timestamp": "2026-11-26T14:35:56.381834823",
+    "TraceId": "14e1b0c2e5779098cf708d7988b76aed",
+    "SpanId": "4a699640d0279194",
+    "ParentSpanId": "1a17865437d5167d",
+    "SpanName": "execute_tool get_customer",
+    "SpanKind": "Internal",
+    "ServiceName": "rolda-demo-agents",
+    "ResourceAttributes": {
+      "telemetry.sdk.language": "python",
+      "telemetry.sdk.name": "opentelemetry",
+      "telemetry.sdk.version": "1.45.2",
+      "service.instance.id": "a3e503ac-68d1-4169-aeaf-2fdbda17e4e8",
+      "service.name": "rolda-demo-agents",
+      "service.version": "0.1.0",
+      "deployment.environment": "fixtures"
+    },
+    "SpanAttributes": {
+      "gen_ai.operation.name": "execute_tool",
+      "gen_ai.tool.name": "get_customer",
+      "gen_ai.tool.type": "function",
+      "gen_ai.tool.call.arguments": "{\"customer_id\": \"c-102\"}"
+    },
+    "Duration": 30213124,
+    "StatusCode": "Unset",
+    "StatusMessage": ""
+  },
+  {
+    "Timestamp": "2026-11-26T14:35:56.412317315",
+    "TraceId": "14e1b0c2e5779098cf708d7988b76aed",
+    "SpanId": "636f7ec7c877c221",
+    "ParentSpanId": "1a17865437d5167d",
+    "SpanName": "execute_tool search_orders",
+    "SpanKind": "Internal",
+    "ServiceName": "rolda-demo-agents",
+    "ResourceAttributes": {
+      "telemetry.sdk.language": "python",
+      "telemetry.sdk.name": "opentelemetry",
+      "telemetry.sdk.version": "1.45.2",
+      "service.instance.id": "a3e503ac-68d1-4169-aeaf-2fdbda17e4e8",
+      "service.name": "rolda-demo-agents",
+      "service.version": "0.1.0",
+      "deployment.environment": "fixtures"
+    },
+    "SpanAttributes": {
+      "gen_ai.operation.name": "execute_tool",
+      "gen_ai.tool.name": "search_orders",
+      "gen_ai.tool.type": "function",
+      "gen_ai.tool.call.arguments": "{\"customer_id\": \"c-102\"}"
+    },
+    "Duration": 50245701,
+    "StatusCode": "Unset",
+    "StatusMessage": ""
+  },
+  {
+    "Timestamp": "2026-11-26T14:35:56.462834856",
+    "TraceId": "14e1b0c2e5779098cf708d7988b76aed",
+    "SpanId": "201b97b089070247",
+    "ParentSpanId": "1a17865437d5167d",
+    "SpanName": "chat stub-model-1",
+    "SpanKind": "Client",
+    "ServiceName": "rolda-demo-agents",
+    "ResourceAttributes": {
+      "telemetry.sdk.language": "python",
+      "telemetry.sdk.name": "opentelemetry",
+      "telemetry.sdk.version": "1.45.2",
+      "service.instance.id": "a3e503ac-68d1-4169-aeaf-2fdbda17e4e8",
+      "service.name": "rolda-demo-agents",
+      "service.version": "0.1.0",
+      "deployment.environment": "fixtures"
+    },
+    "SpanAttributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "stub",
+      "gen_ai.request.model": "stub-model-1",
+      "gen_ai.response.model": "stub-model-1",
+      "gen_ai.usage.input_tokens": "822",
+      "gen_ai.usage.output_tokens": "104",
+      "gen_ai.response.finish_reasons": "stop"
+    },
+    "Duration": 280170193,
+    "StatusCode": "Unset",
+    "StatusMessage": ""
+  },
+  {
+    "Timestamp": "2026-11-26T14:35:56.743132896",
+    "TraceId": "4bf85c3a0758e792ef1be8a803bb0b52",
+    "SpanId": "183134d377bb5454",
+    "ParentSpanId": "",
+    "SpanName": "invoke_agent support-agent",
+    "SpanKind": "Internal",
+    "ServiceName": "rolda-demo-agents",
+    "ResourceAttributes": {
+      "telemetry.sdk.language": "python",
+      "telemetry.sdk.name": "opentelemetry",
+      "telemetry.sdk.version": "1.45.2",
+      "service.instance.id": "a3e503ac-68d1-4169-aeaf-2fdbda17e4e8",
+      "service.name": "rolda-demo-agents",
+      "service.version": "0.1.0",
+      "deployment.environment": "fixtures"
+    },
+    "SpanAttributes": {
+      "gen_ai.operation.name": "invoke_agent",
+      "gen_ai.agent.name": "support-agent"
+    },
+    "Duration": 641412680,
+    "StatusCode": "Unset",
+    "StatusMessage": ""
+  },
+  {
+    "Timestamp": "2026-11-26T14:35:56.743168168",
+    "TraceId": "4bf85c3a0758e792ef1be8a803bb0b52",
+    "SpanId": "de4b0b42c659a776",
+    "ParentSpanId": "183134d377bb5454",
+    "SpanName": "chat stub-model-1",
+    "SpanKind": "Client",
+    "ServiceName": "rolda-demo-agents",
+    "ResourceAttributes": {
+      "telemetry.sdk.language": "python",
+      "telemetry.sdk.name": "opentelemetry",
+      "telemetry.sdk.version": "1.45.2",
+      "service.instance.id": "a3e503ac-68d1-4169-aeaf-2fdbda17e4e8",
+      "service.name": "rolda-demo-agents",
+      "service.version": "0.1.0",
+      "deployment.environment": "fixtures"
+    },
+    "SpanAttributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "stub",
+      "gen_ai.request.model": "stub-model-1",
+      "gen_ai.response.model": "stub-model-1",
+      "gen_ai.usage.input_tokens": "511",
+      "gen_ai.usage.output_tokens": "55",
+      "gen_ai.response.finish_reasons": "stop"
+    },
+    "Duration": 240198362,
+    "StatusCode": "Unset",
+    "StatusMessage": ""
+  },
+  {
+    "Timestamp": "2026-11-26T14:35:56.983622738",
+    "TraceId": "4bf85c3a0758e792ef1be8a803bb0b52",
+    "SpanId": "3c80492f5dc74e2a",
+    "ParentSpanId": "183134d377bb5454",
+    "SpanName": "execute_tool get_customer",
+    "SpanKind": "Internal",
+    "ServiceName": "rolda-demo-agents",
+    "ResourceAttributes": {
+      "telemetry.sdk.language": "python",
+      "telemetry.sdk.name": "opentelemetry",
+      "telemetry.sdk.version": "1.45.2",
+      "service.instance.id": "a3e503ac-68d1-4169-aeaf-2fdbda17e4e8",
+      "service.name": "rolda-demo-agents",
+      "service.version": "0.1.0",
+      "deployment.environment": "fixtures"
+    },
+    "SpanAttributes": {
+      "gen_ai.operation.name": "execute_tool",
+      "gen_ai.tool.name": "get_customer",
+      "gen_ai.tool.type": "function",
+      "gen_ai.tool.call.arguments": "{\"customer_id\": \"c-103\"}"
+    },
+    "Duration": 30138553,
+    "StatusCode": "Unset",
+    "StatusMessage": ""
+  },
+  {
+    "Timestamp": "2026-11-26T14:35:57.013996010",
+    "TraceId": "4bf85c3a0758e792ef1be8a803bb0b52",
+    "SpanId": "0a4153bac1e93e6d",
+    "ParentSpanId": "183134d377bb5454",
+    "SpanName": "execute_tool search_orders",
+    "SpanKind": "Internal",
+    "ServiceName": "rolda-demo-agents",
+    "ResourceAttributes": {
+      "telemetry.sdk.language": "python",
+      "telemetry.sdk.name": "opentelemetry",
+      "telemetry.sdk.version": "1.45.2",
+      "service.instance.id": "a3e503ac-68d1-4169-aeaf-2fdbda17e4e8",
+      "service.name": "rolda-demo-agents",
+      "service.version": "0.1.0",
+      "deployment.environment": "fixtures"
+    },
+    "SpanAttributes": {
+      "gen_ai.operation.name": "execute_tool",
+      "gen_ai.tool.name": "search_orders",
+      "gen_ai.tool.type": "function",
+      "gen_ai.tool.call.arguments": "{\"customer_id\": \"c-103\"}"
+    },
+    "Duration": 50108748,
+    "StatusCode": "Unset",
+    "StatusMessage": ""
+  },
+  {
+    "Timestamp": "2026-11-26T14:35:57.064215097",
+    "TraceId": "4bf85c3a0758e792ef1be8a803bb0b52",
+    "SpanId": "40d7e56c7e15ff36",
+    "ParentSpanId": "183134d377bb5454",
+    "SpanName": "chat stub-model-1",
+    "SpanKind": "Client",
+    "ServiceName": "rolda-demo-agents",
+    "ResourceAttributes": {
+      "telemetry.sdk.language": "python",
+      "telemetry.sdk.name": "opentelemetry",
+      "telemetry.sdk.version": "1.45.2",
+      "service.instance.id": "a3e503ac-68d1-4169-aeaf-2fdbda17e4e8",
+      "service.name": "rolda-demo-agents",
+      "service.version": "0.1.0",
+      "deployment.environment": "fixtures"
+    },
+    "SpanAttributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "stub",
+      "gen_ai.request.model": "stub-model-1",
+      "gen_ai.response.model": "stub-model-1",
+      "gen_ai.usage.input_tokens": "883",
+      "gen_ai.usage.output_tokens": "111",
+      "gen_ai.response.finish_reasons": "stop"
+    },
+    "Duration": 320250250,
+    "StatusCode": "Unset",
+    "StatusMessage": ""
+  },
+  {
+    "Timestamp": "2026-11-26T14:35:57.384729940",
+    "TraceId": "1aea792bd073ed47c4535b6ea427bb53",
+    "SpanId": "ab39fde04cac6e77",
+    "ParentSpanId": "",
+    "SpanName": "invoke_agent support-agent",
+    "SpanKind": "Internal",
+    "ServiceName": "rolda-demo-agents",
+    "ResourceAttributes": {
+      "telemetry.sdk.language": "python",
+      "telemetry.sdk.name": "opentelemetry",
+      "telemetry.sdk.version": "1.45.2",
+      "service.instance.id": "a3e503ac-68d1-4169-aeaf-2fdbda17e4e8",
+      "service.name": "rolda-demo-agents",
+      "service.version": "0.1.0",
+      "deployment.environment": "fixtures"
+    },
+    "SpanAttributes": {
+      "gen_ai.operation.name": "invoke_agent",
+      "gen_ai.agent.name": "support-agent"
+    },
+    "Duration": 571274275,
+    "StatusCode": "Error",
+    "StatusMessage": "tool failure"
+  },
+  {
+    "Timestamp": "2026-11-26T14:35:57.384872912",
+    "TraceId": "1aea792bd073ed47c4535b6ea427bb53",
+    "SpanId": "1fe4fd57ba4a3951",
+    "ParentSpanId": "ab39fde04cac6e77",
+    "SpanName": "chat stub-model-1",
+    "SpanKind": "Client",
+    "ServiceName": "rolda-demo-agents",
+    "ResourceAttributes": {
+      "telemetry.sdk.language": "python",
+      "telemetry.sdk.name": "opentelemetry",
+      "telemetry.sdk.version": "1.45.2",
+      "service.instance.id": "a3e503ac-68d1-4169-aeaf-2fdbda17e4e8",
+      "service.name": "rolda-demo-agents",
+      "service.version": "0.1.0",
+      "deployment.environment": "fixtures"
+    },
+    "SpanAttributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "stub",
+      "gen_ai.request.model": "stub-model-1",
+      "gen_ai.response.model": "stub-model-1",
+      "gen_ai.usage.input_tokens": "450",
+      "gen_ai.usage.output_tokens": "35",
+      "gen_ai.response.finish_reasons": "stop"
+    },
+    "Duration": 120239922,
+    "StatusCode": "Unset",
+    "StatusMessage": ""
+  },
+  {
+    "Timestamp": "2026-11-26T14:35:57.505380840",
+    "TraceId": "1aea792bd073ed47c4535b6ea427bb53",
+    "SpanId": "88ffae2392afb39c",
+    "ParentSpanId": "ab39fde04cac6e77",
+    "SpanName": "execute_tool search_orders",
+    "SpanKind": "Internal",
+    "ServiceName": "rolda-demo-agents",
+    "ResourceAttributes": {
+      "telemetry.sdk.language": "python",
+      "telemetry.sdk.name": "opentelemetry",
+      "telemetry.sdk.version": "1.45.2",
+      "service.instance.id": "a3e503ac-68d1-4169-aeaf-2fdbda17e4e8",
+      "service.name": "rolda-demo-agents",
+      "service.version": "0.1.0",
+      "deployment.environment": "fixtures"
+    },
+    "SpanAttributes": {
+      "gen_ai.operation.name": "execute_tool",
+      "gen_ai.tool.name": "search_orders",
+      "gen_ai.tool.type": "function",
+      "gen_ai.tool.call.arguments": "{\"customer_id\": \"c-500\", \"fail\": true}",
+      "error.type": "ToolTimeout"
+    },
+    "Duration": 350364196,
+    "StatusCode": "Error",
+    "StatusMessage": "search_orders timed out after 300ms"
+  },
+  {
+    "Timestamp": "2026-11-26T14:35:57.855850321",
+    "TraceId": "1aea792bd073ed47c4535b6ea427bb53",
+    "SpanId": "33212cbb9e129c90",
+    "ParentSpanId": "ab39fde04cac6e77",
+    "SpanName": "chat stub-model-1",
+    "SpanKind": "Client",
+    "ServiceName": "rolda-demo-agents",
+    "ResourceAttributes": {
+      "telemetry.sdk.language": "python",
+      "telemetry.sdk.name": "opentelemetry",
+      "telemetry.sdk.version": "1.45.2",
+      "service.instance.id": "a3e503ac-68d1-4169-aeaf-2fdbda17e4e8",
+      "service.name": "rolda-demo-agents",
+      "service.version": "0.1.0",
+      "deployment.environment": "fixtures"
+    },
+    "SpanAttributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "stub",
+      "gen_ai.request.model": "stub-model-1",
+      "gen_ai.response.model": "stub-model-1",
+      "gen_ai.usage.input_tokens": "520",
+      "gen_ai.usage.output_tokens": "60",
+      "gen_ai.response.finish_reasons": "stop"
+    },
+    "Duration": 100107220,
+    "StatusCode": "Unset",
+    "StatusMessage": ""
+  },
+  {
+    "Timestamp": "2026-11-26T14:35:57.956079455",
+    "TraceId": "9eea290c6c4321fb56d97a247f9e9154",
+    "SpanId": "7eda8def74529d19",
+    "ParentSpanId": "",
+    "SpanName": "invoke_agent support-agent",
+    "SpanKind": "Internal",
+    "ServiceName": "rolda-demo-agents",
+    "ResourceAttributes": {
+      "telemetry.sdk.language": "python",
+      "telemetry.sdk.name": "opentelemetry",
+      "telemetry.sdk.version": "1.45.2",
+      "service.instance.id": "a3e503ac-68d1-4169-aeaf-2fdbda17e4e8",
+      "service.name": "rolda-demo-agents",
+      "service.version": "0.1.0",
+      "deployment.environment": "fixtures"
+    },
+    "SpanAttributes": {
+      "gen_ai.operation.name": "invoke_agent",
+      "gen_ai.agent.name": "support-agent"
+    },
+    "Duration": 702730213,
+    "StatusCode": "Unset",
+    "StatusMessage": ""
+  },
+  {
+    "Timestamp": "2026-11-26T14:35:57.956114815",
+    "TraceId": "9eea290c6c4321fb56d97a247f9e9154",
+    "SpanId": "37057c75091fb80b",
+    "ParentSpanId": "7eda8def74529d19",
+    "SpanName": "chat stub-model-1",
+    "SpanKind": "Client",
+    "ServiceName": "rolda-demo-agents",
+    "ResourceAttributes": {
+      "telemetry.sdk.language": "python",
+      "telemetry.sdk.name": "opentelemetry",
+      "telemetry.sdk.version": "1.45.2",
+      "service.instance.id": "a3e503ac-68d1-4169-aeaf-2fdbda17e4e8",
+      "service.name": "rolda-demo-agents",
+      "service.version": "0.1.0",
+      "deployment.environment": "fixtures"
+    },
+    "SpanAttributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "stub",
+      "gen_ai.request.model": "stub-model-1",
+      "gen_ai.response.model": "stub-model-1",
+      "gen_ai.usage.input_tokens": "450",
+      "gen_ai.usage.output_tokens": "30",
+      "gen_ai.response.finish_reasons": "stop"
+    },
+    "Duration": 100134745,
+    "StatusCode": "Unset",
+    "StatusMessage": ""
+  },
+  {
+    "Timestamp": "2026-11-26T14:35:58.056372030",
+    "TraceId": "9eea290c6c4321fb56d97a247f9e9154",
+    "SpanId": "c204cac59cab4b3f",
+    "ParentSpanId": "7eda8def74529d19",
+    "SpanName": "execute_tool search_orders",
+    "SpanKind": "Internal",
+    "ServiceName": "rolda-demo-agents",
+    "ResourceAttributes": {
+      "telemetry.sdk.language": "python",
+      "telemetry.sdk.name": "opentelemetry",
+      "telemetry.sdk.version": "1.45.2",
+      "service.instance.id": "a3e503ac-68d1-4169-aeaf-2fdbda17e4e8",
+      "service.name": "rolda-demo-agents",
+      "service.version": "0.1.0",
+      "deployment.environment": "fixtures"
+    },
+    "SpanAttributes": {
+      "gen_ai.operation.name": "execute_tool",
+      "gen_ai.tool.name": "search_orders",
+      "gen_ai.tool.type": "function",
+      "gen_ai.tool.call.arguments": "{\"customer_id\": \"c-777\", \"status\": \"open\"}"
+    },
+    "Duration": 50122456,
+    "StatusCode": "Unset",
+    "StatusMessage": ""
+  },
+  {
+    "Timestamp": "2026-11-26T14:35:58.106622044",
+    "TraceId": "9eea290c6c4321fb56d97a247f9e9154",
+    "SpanId": "f17a0fc4cf4e9866",
+    "ParentSpanId": "7eda8def74529d19",
+    "SpanName": "chat stub-model-1",
+    "SpanKind": "Client",
+    "ServiceName": "rolda-demo-agents",
+    "ResourceAttributes": {
+      "telemetry.sdk.language": "python",
+      "telemetry.sdk.name": "opentelemetry",
+      "telemetry.sdk.version": "1.45.2",
+      "service.instance.id": "a3e503ac-68d1-4169-aeaf-2fdbda17e4e8",
+      "service.name": "rolda-demo-agents",
+      "service.version": "0.1.0",
+      "deployment.environment": "fixtures"
+    },
+    "SpanAttributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "stub",
+      "gen_ai.request.model": "stub-model-1",
+      "gen_ai.response.model": "stub-model-1",
+      "gen_ai.usage.input_tokens": "600",
+      "gen_ai.usage.output_tokens": "30",
+      "gen_ai.response.finish_reasons": "stop"
+    },
+    "Duration": 100172799,
+    "StatusCode": "Unset",
+    "StatusMessage": ""
+  },
+  {
+    "Timestamp": "2026-11-26T14:35:58.207046769",
+    "TraceId": "9eea290c6c4321fb56d97a247f9e9154",
+    "SpanId": "ed3b2997271a4a9d",
+    "ParentSpanId": "7eda8def74529d19",
+    "SpanName": "execute_tool search_orders",
+    "SpanKind": "Internal",
+    "ServiceName": "rolda-demo-agents",
+    "ResourceAttributes": {
+      "telemetry.sdk.language": "python",
+      "telemetry.sdk.name": "opentelemetry",
+      "telemetry.sdk.version": "1.45.2",
+      "service.instance.id": "a3e503ac-68d1-4169-aeaf-2fdbda17e4e8",
+      "service.name": "rolda-demo-agents",
+      "service.version": "0.1.0",
+      "deployment.environment": "fixtures"
+    },
+    "SpanAttributes": {
+      "gen_ai.operation.name": "execute_tool",
+      "gen_ai.tool.name": "search_orders",
+      "gen_ai.tool.type": "function",
+      "gen_ai.tool.call.arguments": "{\"customer_id\": \"c-777\", \"status\": \"open\"}"
+    },
+    "Duration": 50177992,
+    "StatusCode": "Unset",
+    "StatusMessage": ""
+  },
+  {
+    "Timestamp": "2026-11-26T14:35:58.257419312",
+    "TraceId": "9eea290c6c4321fb56d97a247f9e9154",
+    "SpanId": "da64b2ec7f2a1140",
+    "ParentSpanId": "7eda8def74529d19",
+    "SpanName": "chat stub-model-1",
+    "SpanKind": "Client",
+    "ServiceName": "rolda-demo-agents",
+    "ResourceAttributes": {
+      "telemetry.sdk.language": "python",
+      "telemetry.sdk.name": "opentelemetry",
+      "telemetry.sdk.version": "1.45.2",
+      "service.instance.id": "a3e503ac-68d1-4169-aeaf-2fdbda17e4e8",
+      "service.name": "rolda-demo-agents",
+      "service.version": "0.1.0",
+      "deployment.environment": "fixtures"
+    },
+    "SpanAttributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "stub",
+      "gen_ai.request.model": "stub-model-1",
+      "gen_ai.response.model": "stub-model-1",
+      "gen_ai.usage.input_tokens": "750",
+      "gen_ai.usage.output_tokens": "30",
+      "gen_ai.response.finish_reasons": "stop"
+    },
+    "Duration": 100140869,
+    "StatusCode": "Unset",
+    "StatusMessage": ""
+  },
+  {
+    "Timestamp": "2026-11-26T14:35:58.357717654",
+    "TraceId": "9eea290c6c4321fb56d97a247f9e9154",
+    "SpanId": "33424b428a8935de",
+    "ParentSpanId": "7eda8def74529d19",
+    "SpanName": "execute_tool search_orders",
+    "SpanKind": "Internal",
+    "ServiceName": "rolda-demo-agents",
+    "ResourceAttributes": {
+      "telemetry.sdk.language": "python",
+      "telemetry.sdk.name": "opentelemetry",
+      "telemetry.sdk.version": "1.45.2",
+      "service.instance.id": "a3e503ac-68d1-4169-aeaf-2fdbda17e4e8",
+      "service.name": "rolda-demo-agents",
+      "service.version": "0.1.0",
+      "deployment.environment": "fixtures"
+    },
+    "SpanAttributes": {
+      "gen_ai.operation.name": "execute_tool",
+      "gen_ai.tool.name": "search_orders",
+      "gen_ai.tool.type": "function",
+      "gen_ai.tool.call.arguments": "{\"customer_id\": \"c-777\", \"status\": \"open\"}"
+    },
+    "Duration": 50184667,
+    "StatusCode": "Unset",
+    "StatusMessage": ""
+  },
+  {
+    "Timestamp": "2026-11-26T14:35:58.408099232",
+    "TraceId": "9eea290c6c4321fb56d97a247f9e9154",
+    "SpanId": "e98b0bb9069b5832",
+    "ParentSpanId": "7eda8def74529d19",
+    "SpanName": "chat stub-model-1",
+    "SpanKind": "Client",
+    "ServiceName": "rolda-demo-agents",
+    "ResourceAttributes": {
+      "telemetry.sdk.language": "python",
+      "telemetry.sdk.name": "opentelemetry",
+      "telemetry.sdk.version": "1.45.2",
+      "service.instance.id": "a3e503ac-68d1-4169-aeaf-2fdbda17e4e8",
+      "service.name": "rolda-demo-agents",
+      "service.version": "0.1.0",
+      "deployment.environment": "fixtures"
+    },
+    "SpanAttributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "stub",
+      "gen_ai.request.model": "stub-model-1",
+      "gen_ai.response.model": "stub-model-1",
+      "gen_ai.usage.input_tokens": "900",
+      "gen_ai.usage.output_tokens": "30",
+      "gen_ai.response.finish_reasons": "stop"
+    },
+    "Duration": 100155272,
+    "StatusCode": "Unset",
+    "StatusMessage": ""
+  },
+  {
+    "Timestamp": "2026-11-26T14:35:58.508379375",
+    "TraceId": "9eea290c6c4321fb56d97a247f9e9154",
+    "SpanId": "601e37937d58593c",
+    "ParentSpanId": "7eda8def74529d19",
+    "SpanName": "execute_tool search_orders",
+    "SpanKind": "Internal",
+    "ServiceName": "rolda-demo-agents",
+    "ResourceAttributes": {
+      "telemetry.sdk.language": "python",
+      "telemetry.sdk.name": "opentelemetry",
+      "telemetry.sdk.version": "1.45.2",
+      "service.instance.id": "a3e503ac-68d1-4169-aeaf-2fdbda17e4e8",
+      "service.name": "rolda-demo-agents",
+      "service.version": "0.1.0",
+      "deployment.environment": "fixtures"
+    },
+    "SpanAttributes": {
+      "gen_ai.operation.name": "execute_tool",
+      "gen_ai.tool.name": "search_orders",
+      "gen_ai.tool.type": "function",
+      "gen_ai.tool.call.arguments": "{\"customer_id\": \"c-777\", \"status\": \"open\"}"
+    },
+    "Duration": 50140287,
+    "StatusCode": "Unset",
+    "StatusMessage": ""
+  },
+  {
+    "Timestamp": "2026-11-26T14:35:58.558620551",
+    "TraceId": "9eea290c6c4321fb56d97a247f9e9154",
+    "SpanId": "0d6fa2506317f926",
+    "ParentSpanId": "7eda8def74529d19",
+    "SpanName": "chat stub-model-1",
+    "SpanKind": "Client",
+    "ServiceName": "rolda-demo-agents",
+    "ResourceAttributes": {
+      "telemetry.sdk.language": "python",
+      "telemetry.sdk.name": "opentelemetry",
+      "telemetry.sdk.version": "1.45.2",
+      "service.instance.id": "a3e503ac-68d1-4169-aeaf-2fdbda17e4e8",
+      "service.name": "rolda-demo-agents",
+      "service.version": "0.1.0",
+      "deployment.environment": "fixtures"
+    },
+    "SpanAttributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "stub",
+      "gen_ai.request.model": "stub-model-1",
+      "gen_ai.response.model": "stub-model-1",
+      "gen_ai.usage.input_tokens": "1050",
+      "gen_ai.usage.output_tokens": "40",
+      "gen_ai.response.finish_reasons": "stop"
+    },
+    "Duration": 100150297,
+    "StatusCode": "Unset",
+    "StatusMessage": ""
+  },
+  {
+    "Timestamp": "2026-11-26T14:35:58.658912640",
+    "TraceId": "9f2f958cf9c7fca4c04e60552cbf77cd",
+    "SpanId": "d65f05dd90497c98",
+    "ParentSpanId": "",
+    "SpanName": "invoke_agent support-agent",
+    "SpanKind": "Internal",
+    "ServiceName": "rolda-demo-agents",
+    "ResourceAttributes": {
+      "telemetry.sdk.language": "python",
+      "telemetry.sdk.name": "opentelemetry",
+      "telemetry.sdk.version": "1.45.2",
+      "service.instance.id": "a3e503ac-68d1-4169-aeaf-2fdbda17e4e8",
+      "service.name": "rolda-demo-agents",
+      "service.version": "0.1.0",
+      "deployment.environment": "fixtures"
+    },
+    "SpanAttributes": {
+      "gen_ai.operation.name": "invoke_agent",
+      "gen_ai.agent.name": "support-agent"
+    },
+    "Duration": 2230656548,
+    "StatusCode": "Unset",
+    "StatusMessage": ""
+  },
+  {
+    "Timestamp": "2026-11-26T14:35:58.658941891",
+    "TraceId": "9f2f958cf9c7fca4c04e60552cbf77cd",
+    "SpanId": "3699a467df189754",
+    "ParentSpanId": "d65f05dd90497c98",
+    "SpanName": "chat stub-model-1",
+    "SpanKind": "Client",
+    "ServiceName": "rolda-demo-agents",
+    "ResourceAttributes": {
+      "telemetry.sdk.language": "python",
+      "telemetry.sdk.name": "opentelemetry",
+      "telemetry.sdk.version": "1.45.2",
+      "service.instance.id": "a3e503ac-68d1-4169-aeaf-2fdbda17e4e8",
+      "service.name": "rolda-demo-agents",
+      "service.version": "0.1.0",
+      "deployment.environment": "fixtures"
+    },
+    "SpanAttributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "stub",
+      "gen_ai.request.model": "stub-model-1",
+      "gen_ai.response.model": "stub-model-1",
+      "gen_ai.usage.input_tokens": "500",
+      "gen_ai.usage.output_tokens": "50",
+      "gen_ai.response.finish_reasons": "stop"
+    },
+    "Duration": 2000111451,
+    "StatusCode": "Unset",
+    "StatusMessage": ""
+  },
+  {
+    "Timestamp": "2026-11-26T14:36:00.659191775",
+    "TraceId": "9f2f958cf9c7fca4c04e60552cbf77cd",
+    "SpanId": "033ad853fd6ae7e9",
+    "ParentSpanId": "d65f05dd90497c98",
+    "SpanName": "execute_tool get_customer",
+    "SpanKind": "Internal",
+    "ServiceName": "rolda-demo-agents",
+    "ResourceAttributes": {
+      "telemetry.sdk.language": "python",
+      "telemetry.sdk.name": "opentelemetry",
+      "telemetry.sdk.version": "1.45.2",
+      "service.instance.id": "a3e503ac-68d1-4169-aeaf-2fdbda17e4e8",
+      "service.name": "rolda-demo-agents",
+      "service.version": "0.1.0",
+      "deployment.environment": "fixtures"
+    },
+    "SpanAttributes": {
+      "gen_ai.operation.name": "execute_tool",
+      "gen_ai.tool.name": "get_customer",
+      "gen_ai.tool.type": "function",
+      "gen_ai.tool.call.arguments": "{\"customer_id\": \"c-900\"}"
+    },
+    "Duration": 30116574,
+    "StatusCode": "Unset",
+    "StatusMessage": ""
+  },
+  {
+    "Timestamp": "2026-11-26T14:36:00.689390079",
+    "TraceId": "9f2f958cf9c7fca4c04e60552cbf77cd",
+    "SpanId": "beb23fb9e8ae2d73",
+    "ParentSpanId": "d65f05dd90497c98",
+    "SpanName": "chat stub-model-1",
+    "SpanKind": "Client",
+    "ServiceName": "rolda-demo-agents",
+    "ResourceAttributes": {
+      "telemetry.sdk.language": "python",
+      "telemetry.sdk.name": "opentelemetry",
+      "telemetry.sdk.version": "1.45.2",
+      "service.instance.id": "a3e503ac-68d1-4169-aeaf-2fdbda17e4e8",
+      "service.name": "rolda-demo-agents",
+      "service.version": "0.1.0",
+      "deployment.environment": "fixtures"
+    },
+    "SpanAttributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "stub",
+      "gen_ai.request.model": "stub-model-1",
+      "gen_ai.response.model": "stub-model-1",
+      "gen_ai.usage.input_tokens": "800",
+      "gen_ai.usage.output_tokens": "80",
+      "gen_ai.response.finish_reasons": "stop"
+    },
+    "Duration": 200140876,
+    "StatusCode": "Unset",
+    "StatusMessage": ""
+  },
+  {
+    "Timestamp": "2026-11-26T14:36:00.889641842",
+    "TraceId": "4630ce3ead9b41135dcd776192d3f1e6",
+    "SpanId": "70fe380b509df09b",
+    "ParentSpanId": "",
+    "SpanName": "invoke_agent support-agent",
+    "SpanKind": "Internal",
+    "ServiceName": "rolda-demo-agents",
+    "ResourceAttributes": {
+      "telemetry.sdk.language": "python",
+      "telemetry.sdk.name": "opentelemetry",
+      "telemetry.sdk.version": "1.45.2",
+      "service.instance.id": "a3e503ac-68d1-4169-aeaf-2fdbda17e4e8",
+      "service.name": "rolda-demo-agents",
+      "service.version": "0.1.0",
+      "deployment.environment": "fixtures"
+    },
+    "SpanAttributes": {
+      "gen_ai.operation.name": "invoke_agent",
+      "gen_ai.agent.name": "support-agent"
+    },
+    "Duration": 1151017459,
+    "StatusCode": "Unset",
+    "StatusMessage": ""
+  },
+  {
+    "Timestamp": "2026-11-26T14:36:00.889673926",
+    "TraceId": "4630ce3ead9b41135dcd776192d3f1e6",
+    "SpanId": "67d6e3bd90775773",
+    "ParentSpanId": "70fe380b509df09b",
+    "SpanName": "chat stub-model-1",
+    "SpanKind": "Client",
+    "ServiceName": "rolda-demo-agents",
+    "ResourceAttributes": {
+      "telemetry.sdk.language": "python",
+      "telemetry.sdk.name": "opentelemetry",
+      "telemetry.sdk.version": "1.45.2",
+      "service.instance.id": "a3e503ac-68d1-4169-aeaf-2fdbda17e4e8",
+      "service.name": "rolda-demo-agents",
+      "service.version": "0.1.0",
+      "deployment.environment": "fixtures"
+    },
+    "SpanAttributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "stub",
+      "gen_ai.request.model": "stub-model-1",
+      "gen_ai.response.model": "stub-model-1",
+      "gen_ai.usage.input_tokens": "95000",
+      "gen_ai.usage.output_tokens": "1200",
+      "gen_ai.response.finish_reasons": "stop"
+    },
+    "Duration": 500186844,
+    "StatusCode": "Unset",
+    "StatusMessage": ""
+  },
+  {
+    "Timestamp": "2026-11-26T14:36:01.390125485",
+    "TraceId": "4630ce3ead9b41135dcd776192d3f1e6",
+    "SpanId": "8acb2bdd7308c543",
+    "ParentSpanId": "70fe380b509df09b",
+    "SpanName": "execute_tool search_orders",
+    "SpanKind": "Internal",
+    "ServiceName": "rolda-demo-agents",
+    "ResourceAttributes": {
+      "telemetry.sdk.language": "python",
+      "telemetry.sdk.name": "opentelemetry",
+      "telemetry.sdk.version": "1.45.2",
+      "service.instance.id": "a3e503ac-68d1-4169-aeaf-2fdbda17e4e8",
+      "service.name": "rolda-demo-agents",
+      "service.version": "0.1.0",
+      "deployment.environment": "fixtures"
+    },
+    "SpanAttributes": {
+      "gen_ai.operation.name": "execute_tool",
+      "gen_ai.tool.name": "search_orders",
+      "gen_ai.tool.type": "function",
+      "gen_ai.tool.call.arguments": "{\"customer_id\": \"c-950\"}"
+    },
+    "Duration": 50147382,
+    "StatusCode": "Unset",
+    "StatusMessage": ""
+  },
+  {
+    "Timestamp": "2026-11-26T14:36:01.440477859",
+    "TraceId": "4630ce3ead9b41135dcd776192d3f1e6",
+    "SpanId": "51f411833e61007e",
+    "ParentSpanId": "70fe380b509df09b",
+    "SpanName": "chat stub-model-1",
+    "SpanKind": "Client",
+    "ServiceName": "rolda-demo-agents",
+    "ResourceAttributes": {
+      "telemetry.sdk.language": "python",
+      "telemetry.sdk.name": "opentelemetry",
+      "telemetry.sdk.version": "1.45.2",
+      "service.instance.id": "a3e503ac-68d1-4169-aeaf-2fdbda17e4e8",
+      "service.name": "rolda-demo-agents",
+      "service.version": "0.1.0",
+      "deployment.environment": "fixtures"
+    },
+    "SpanAttributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "stub",
+      "gen_ai.request.model": "stub-model-1",
+      "gen_ai.response.model": "stub-model-1",
+      "gen_ai.usage.input_tokens": "118000",
+      "gen_ai.usage.output_tokens": "1500",
+      "gen_ai.response.finish_reasons": "stop"
+    },
+    "Duration": 600142704,
+    "StatusCode": "Unset",
+    "StatusMessage": ""
+  },
+  {
+    "Timestamp": "2026-11-26T14:36:02.040734649",
+    "TraceId": "fbf953d7da18dbbe7174187a4fc5b51d",
+    "SpanId": "32c242594f24f2d9",
+    "ParentSpanId": "",
+    "SpanName": "invoke_agent billing-agent",
+    "SpanKind": "Internal",
+    "ServiceName": "rolda-demo-agents",
+    "ResourceAttributes": {
+      "telemetry.sdk.language": "python",
+      "telemetry.sdk.name": "opentelemetry",
+      "telemetry.sdk.version": "1.45.2",
+      "service.instance.id": "a3e503ac-68d1-4169-aeaf-2fdbda17e4e8",
+      "service.name": "rolda-demo-agents",
+      "service.version": "0.1.0",
+      "deployment.environment": "fixtures"
+    },
+    "SpanAttributes": {
+      "gen_ai.operation.name": "invoke_agent",
+      "gen_ai.agent.name": "billing-agent"
+    },
+    "Duration": 711250977,
+    "StatusCode": "Unset",
+    "StatusMessage": ""
+  },
+  {
+    "Timestamp": "2026-11-26T14:36:02.040765210",
+    "TraceId": "fbf953d7da18dbbe7174187a4fc5b51d",
+    "SpanId": "339f17ddb1776018",
+    "ParentSpanId": "32c242594f24f2d9",
+    "SpanName": "chat stub-model-1",
+    "SpanKind": "Client",
+    "ServiceName": "rolda-demo-agents",
+    "ResourceAttributes": {
+      "telemetry.sdk.language": "python",
+      "telemetry.sdk.name": "opentelemetry",
+      "telemetry.sdk.version": "1.45.2",
+      "service.instance.id": "a3e503ac-68d1-4169-aeaf-2fdbda17e4e8",
+      "service.name": "rolda-demo-agents",
+      "service.version": "0.1.0",
+      "deployment.environment": "fixtures"
+    },
+    "SpanAttributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "stub",
+      "gen_ai.request.model": "stub-model-1",
+      "gen_ai.response.model": "stub-model-1",
+      "gen_ai.usage.input_tokens": "548",
+      "gen_ai.usage.output_tokens": "60",
+      "gen_ai.response.finish_reasons": "stop"
+    },
+    "Duration": 270149030,
+    "StatusCode": "Unset",
+    "StatusMessage": ""
+  },
+  {
+    "Timestamp": "2026-11-26T14:36:02.311042496",
+    "TraceId": "fbf953d7da18dbbe7174187a4fc5b51d",
+    "SpanId": "87d6b249ef48d744",
+    "ParentSpanId": "32c242594f24f2d9",
+    "SpanName": "execute_tool get_customer",
+    "SpanKind": "Internal",
+    "ServiceName": "rolda-demo-agents",
+    "ResourceAttributes": {
+      "telemetry.sdk.language": "python",
+      "telemetry.sdk.name": "opentelemetry",
+      "telemetry.sdk.version": "1.45.2",
+      "service.instance.id": "a3e503ac-68d1-4169-aeaf-2fdbda17e4e8",
+      "service.name": "rolda-demo-agents",
+      "service.version": "0.1.0",
+      "deployment.environment": "fixtures"
+    },
+    "SpanAttributes": {
+      "gen_ai.operation.name": "execute_tool",
+      "gen_ai.tool.name": "get_customer",
+      "gen_ai.tool.type": "function",
+      "gen_ai.tool.call.arguments": "{\"customer_id\": \"c-104\"}"
+    },
+    "Duration": 30101825,
+    "StatusCode": "Unset",
+    "StatusMessage": ""
+  },
+  {
+    "Timestamp": "2026-11-26T14:36:02.341306050",
+    "TraceId": "fbf953d7da18dbbe7174187a4fc5b51d",
+    "SpanId": "d1cf0aff27727965",
+    "ParentSpanId": "32c242594f24f2d9",
+    "SpanName": "execute_tool search_orders",
+    "SpanKind": "Internal",
+    "ServiceName": "rolda-demo-agents",
+    "ResourceAttributes": {
+      "telemetry.sdk.language": "python",
+      "telemetry.sdk.name": "opentelemetry",
+      "telemetry.sdk.version": "1.45.2",
+      "service.instance.id": "a3e503ac-68d1-4169-aeaf-2fdbda17e4e8",
+      "service.name": "rolda-demo-agents",
+      "service.version": "0.1.0",
+      "deployment.environment": "fixtures"
+    },
+    "SpanAttributes": {
+      "gen_ai.operation.name": "execute_tool",
+      "gen_ai.tool.name": "search_orders",
+      "gen_ai.tool.type": "function",
+      "gen_ai.tool.call.arguments": "{\"customer_id\": \"c-104\"}"
+    },
+    "Duration": 50138069,
+    "StatusCode": "Unset",
+    "StatusMessage": ""
+  },
+  {
+    "Timestamp": "2026-11-26T14:36:02.391650154",
+    "TraceId": "fbf953d7da18dbbe7174187a4fc5b51d",
+    "SpanId": "3d8a1fc0749de593",
+    "ParentSpanId": "32c242594f24f2d9",
+    "SpanName": "chat stub-model-1",
+    "SpanKind": "Client",
+    "ServiceName": "rolda-demo-agents",
+    "ResourceAttributes": {
+      "telemetry.sdk.language": "python",
+      "telemetry.sdk.name": "opentelemetry",
+      "telemetry.sdk.version": "1.45.2",
+      "service.instance.id": "a3e503ac-68d1-4169-aeaf-2fdbda17e4e8",
+      "service.name": "rolda-demo-agents",
+      "service.version": "0.1.0",
+      "deployment.environment": "fixtures"
+    },
+    "SpanAttributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "stub",
+      "gen_ai.request.model": "stub-model-1",
+      "gen_ai.response.model": "stub-model-1",
+      "gen_ai.usage.input_tokens": "944",
+      "gen_ai.usage.output_tokens": "118",
+      "gen_ai.response.finish_reasons": "stop"
+    },
+    "Duration": 360268238,
+    "StatusCode": "Unset",
+    "StatusMessage": ""
+  }
+]

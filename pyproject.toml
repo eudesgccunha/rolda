@@ -7,8 +7,19 @@ name = "rolda"
 version = "0.1.0"
 description = "Observability for AI agents in production"
 readme = "README.md"
+keywords = ["observability", "ai-agents", "opentelemetry", "monitoring"]
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "anthropic>=2.14.0",
+    "clickhouse-connect>=1.13.0",
+    "fastapi>=0.165.0",
+    "psycopg[binary]>=3.3.9",
+    "uvicorn>=0.54.0",
+]
+
+[project.urls]
+Repository = "https://github.com/eudesgccunha/rolda"
+Issues = "https://github.com/eudesgccunha/rolda/issues"
 
 [dependency-groups]
 dev = [
@@ -59,7 +70,10 @@ files = ["src", "tests"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "--strict-markers --strict-config"
+addopts = "--strict-markers --strict-config -m 'not integration'"
+markers = [
+    "integration: needs the Compose stack running (deploy/compose)",
+]
 
 [tool.bandit]
 exclude_dirs = ["tests"]

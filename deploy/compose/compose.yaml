@@ -1,0 +1,135 @@
+services:
+  clickhouse:
+    image: clickhouse/clickhouse-server:25.8@sha256:0152dd511befe6a2c2ef53e930726179669b08116da78500b37c51c96ff5ee77
+    environment:
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:?set CLICKHOUSE_USER in .env}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:?set CLICKHOUSE_PASSWORD in .env}
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: "0"
+    ports:
+      - "127.0.0.1:8123:8123"
+      - "127.0.0.1:9000:9000"
+    volumes:
+      - clickhouse-data:/var/lib/clickhouse
+      - ./sql:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1:8123/ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.166.0@sha256:3e18fe04181de50bdd72e23ad4a4d6214b54351e63d496f1c58127cc4541ad7f
+    command: ["--config=/etc/otelcol/config.yaml"]
+    environment:
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:?set CLICKHOUSE_USER in .env}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:?set CLICKHOUSE_PASSWORD in .env}
+    ports:
+      - "127.0.0.1:4317:4317"
+      - "127.0.0.1:4318:4318"
+    volumes:
+      - ./collector.yaml:/etc/otelcol/config.yaml:ro
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:17@sha256:87c8b42f423b45d5247e6aa8fdb2e7762fec164c68a50fe3eb07e7bfcaf4dbcf
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?set POSTGRES_USER in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: rolda
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./sql-postgres:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d rolda"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  # The services below run only with the "app" profile:
+  #   docker compose --profile app up -d --build
+  worker:
+    profiles: ["app"]
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile
+    image: rolda:dev
+    command: ["python", "-m", "rolda.entrypoints"]
+    environment:
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:?set CLICKHOUSE_USER in .env}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:?set CLICKHOUSE_PASSWORD in .env}
+      POSTGRES_USER: ${POSTGRES_USER:?set POSTGRES_USER in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      ROLDA_CLICKHOUSE_HOST: clickhouse
+      ROLDA_POSTGRES_HOST: postgres
+      ROLDA_WEBHOOK_URL: ${ROLDA_WEBHOOK_URL:-}
+      ROLDA_SLACK_WEBHOOK_URL: ${ROLDA_SLACK_WEBHOOK_URL:-}
+      ROLDA_GOOGLE_CHAT_WEBHOOK_URL: ${ROLDA_GOOGLE_CHAT_WEBHOOK_URL:-}
+      ROLDA_TEAMS_WEBHOOK_URL: ${ROLDA_TEAMS_WEBHOOK_URL:-}
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+
+  api:
+    profiles: ["app"]
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile
+    image: rolda:dev
+    command: ["python", "-m", "rolda.entrypoints.api_main"]
+    environment:
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:?set CLICKHOUSE_USER in .env}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:?set CLICKHOUSE_PASSWORD in .env}
+      POSTGRES_USER: ${POSTGRES_USER:?set POSTGRES_USER in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      ROLDA_CLICKHOUSE_HOST: clickhouse
+      ROLDA_POSTGRES_HOST: postgres
+      # Optional here so that "docker compose up" without the app profile
+      # keeps working. The API refuses to start without a token.
+      ROLDA_API_TOKEN: ${ROLDA_API_TOKEN:-}
+      # Listens on all interfaces inside the container only. The published
+      # port below is bound to the host loopback. Change the host port with
+      # ROLDA_API_HOST_PORT if 8000 is taken.
+      ROLDA_API_HOST: 0.0.0.0
+    ports:
+      - "127.0.0.1:${ROLDA_API_HOST_PORT:-8000}:8000"
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request as u; u.urlopen('http://127.0.0.1:8000/health', timeout=3)"
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+
+volumes:
+  clickhouse-data:
+  postgres-data:

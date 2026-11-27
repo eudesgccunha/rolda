@@ -1,0 +1,240 @@
+"""Tests for the worker window processing."""
+
+import asyncio
+from collections.abc import Callable
+from datetime import UTC, datetime, timedelta
+
+import pytest
+
+from rolda.alerts import Alert, AlertDeliveryError
+from rolda.detection import DetectionConfig, default_rules
+from rolda.entrypoints.worker import Worker, WorkerConfig
+from rolda.incidents import InMemoryIncidentStore
+from rolda.traces import (
+    InMemorySpanSource,
+    Operation,
+    Span,
+    SpanStatus,
+)
+
+SpanFactory = Callable[..., Span]
+T0 = datetime(2026, 11, 26, 10, tzinfo=UTC)
+WINDOW = timedelta(minutes=5)
+NOW = T0 + timedelta(hours=1)
+
+
+def _worker(spans: list[Span], store: InMemoryIncidentStore) -> Worker:
+    return Worker(
+        source=InMemorySpanSource(spans),
+        store=store,
+        rules=default_rules(DetectionConfig()),
+        config=WorkerConfig(lag=timedelta(minutes=2)),
+        clock=lambda: NOW,
+    )
+
+
+def _failing_trace(make_span: SpanFactory) -> list[Span]:
+    return [
+        make_span("root", operation=Operation.AGENT),
+        make_span(
+            "tool",
+            parent="root",
+            operation=Operation.TOOL,
+            start_s=1,
+            status=SpanStatus.ERROR,
+        ),
+    ]
+
+
+def test_window_creates_an_incident_for_a_failing_trace(
+    make_span: SpanFactory,
+) -> None:
+    store = InMemoryIncidentStore()
+    worker = _worker(_failing_trace(make_span), store)
+
+    result = asyncio.run(worker.run_window(T0, T0 + WINDOW))
+
+    assert result.new_incidents == 1
+    [incident] = store.all()
+    assert incident.rule == "span_error"
+    assert incident.span_id == "tool"
+    assert incident.detected_at == NOW
+
+
+def test_reprocessing_the_same_window_does_not_duplicate(
+    make_span: SpanFactory,
+) -> None:
+    store = InMemoryIncidentStore()
+    worker = _worker(_failing_trace(make_span), store)
+
+    first = asyncio.run(worker.run_window(T0, T0 + WINDOW))
+    second = asyncio.run(worker.run_window(T0, T0 + WINDOW))
+
+    assert (first.new_incidents, second.new_incidents) == (1, 0)
+    assert second.findings == 1
+    assert len(store.all()) == 1
+
+
+def test_late_span_inside_lag_is_seen_by_the_next_window(
+    make_span: SpanFactory,
+) -> None:
+    spans = [
+        make_span("root", operation=Operation.AGENT, start_s=290),
+        make_span(
+            "tool",
+            parent="root",
+            operation=Operation.TOOL,
+            start_s=295,
+            status=SpanStatus.ERROR,
+        ),
+    ]
+    store = InMemoryIncidentStore()
+    source = InMemorySpanSource(spans[:1])
+    worker = Worker(
+        source=source,
+        store=store,
+        rules=default_rules(DetectionConfig()),
+        config=WorkerConfig(lag=timedelta(minutes=2)),
+        clock=lambda: NOW,
+    )
+
+    asyncio.run(worker.run_window(T0, T0 + WINDOW))
+    source.add(spans[1])
+    asyncio.run(worker.run_window(T0 + WINDOW, T0 + 2 * WINDOW))
+    asyncio.run(worker.run_window(T0 + WINDOW, T0 + 2 * WINDOW))
+
+    assert [i.span_id for i in store.all()] == ["tool"]
+
+
+def test_healthy_window_creates_no_incident(
+    make_span: SpanFactory,
+) -> None:
+    store = InMemoryIncidentStore()
+    worker = _worker([make_span("root", operation=Operation.AGENT)], store)
+
+    result = asyncio.run(worker.run_window(T0, T0 + WINDOW))
+
+    assert result.traces == 1
+    assert result.new_incidents == 0
+
+
+def test_incident_carries_the_probable_cause(
+    make_span: SpanFactory,
+) -> None:
+    store = InMemoryIncidentStore()
+    worker = _worker(_failing_trace(make_span), store)
+
+    asyncio.run(worker.run_window(T0, T0 + WINDOW))
+
+    [incident] = store.all()
+    assert incident.path == ("root", "tool")
+    assert incident.signature == "agent-a|span_error|tool|boom"
+
+
+class _RecordingAlerter:
+    def __init__(self, fail: bool = False) -> None:
+        self.alerts: list[Alert] = []
+        self._fail = fail
+
+    async def send(self, alert: Alert) -> None:
+        self.alerts.append(alert)
+        if self._fail:
+            msg = "down"
+            raise AlertDeliveryError(msg)
+
+
+def _alerting_worker(
+    spans: list[Span],
+    store: InMemoryIncidentStore,
+    alerters: list[_RecordingAlerter],
+) -> Worker:
+    return Worker(
+        source=InMemorySpanSource(spans),
+        store=store,
+        rules=default_rules(DetectionConfig()),
+        config=WorkerConfig(lag=timedelta(minutes=2)),
+        clock=lambda: NOW,
+        alerters=alerters,
+    )
+
+
+def test_new_incident_is_alerted_once_even_when_reprocessed(
+    make_span: SpanFactory,
+) -> None:
+    alerter = _RecordingAlerter()
+    worker = _alerting_worker(
+        _failing_trace(make_span), InMemoryIncidentStore(), [alerter]
+    )
+
+    asyncio.run(worker.run_window(T0, T0 + WINDOW))
+    asyncio.run(worker.run_window(T0, T0 + WINDOW))
+
+    assert len(alerter.alerts) == 1
+    assert "root > tool" in alerter.alerts[0].hypothesis
+
+
+def test_failed_alert_is_logged_and_does_not_stop_the_worker(
+    make_span: SpanFactory, caplog: pytest.LogCaptureFixture
+) -> None:
+    broken = _RecordingAlerter(fail=True)
+    healthy = _RecordingAlerter()
+    store = InMemoryIncidentStore()
+    worker = _alerting_worker(
+        _failing_trace(make_span), store, [broken, healthy]
+    )
+
+    result = asyncio.run(worker.run_window(T0, T0 + WINDOW))
+
+    assert result.new_incidents == 1
+    assert len(store.all()) == 1
+    assert len(healthy.alerts) == 1
+    assert "alert delivery failed" in caplog.text
+
+
+class _CountingSource(InMemorySpanSource):
+    """Span source that counts how often the baseline history is read."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.history_reads = 0
+
+    async def spans_between(
+        self, start: datetime, end: datetime
+    ) -> list[Span]:
+        if end - start > timedelta(days=1):
+            self.history_reads += 1
+        return list(await super().spans_between(start, end))
+
+
+def _counting_worker(refresh: timedelta) -> tuple[Worker, _CountingSource]:
+    source = _CountingSource()
+    worker = Worker(
+        source=source,
+        store=InMemoryIncidentStore(),
+        rules=default_rules(DetectionConfig()),
+        config=WorkerConfig(baseline_refresh=refresh),
+        clock=lambda: NOW,
+    )
+    return worker, source
+
+
+def test_baseline_is_reused_inside_the_refresh_interval() -> None:
+    worker, source = _counting_worker(timedelta(hours=1))
+
+    asyncio.run(worker.run_window(T0, T0 + WINDOW))
+    asyncio.run(worker.run_window(T0 + WINDOW, T0 + 2 * WINDOW))
+
+    assert source.history_reads == 1
+
+
+def test_baseline_is_rebuilt_after_the_refresh_interval() -> None:
+    worker, source = _counting_worker(timedelta(hours=1))
+
+    asyncio.run(worker.run_window(T0, T0 + WINDOW))
+    asyncio.run(
+        worker.run_window(
+            T0 + timedelta(hours=2), T0 + timedelta(hours=2, minutes=5)
+        )
+    )
+
+    assert source.history_reads == 2
