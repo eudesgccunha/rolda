@@ -35,3 +35,12 @@ def order_key(incident: Incident) -> OrderKey:
 def agent_of(incident: Incident) -> str:
     """Return the agent name stored first in the signature."""
     return incident.signature.split("|", 1)[0]
+
+
+@dataclass(frozen=True, slots=True)
+class PendingDelivery:
+    """An alert that still has to reach one channel."""
+
+    incident: Incident
+    channel: str
+    attempts: int

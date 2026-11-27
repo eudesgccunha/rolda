@@ -132,6 +132,8 @@ def test_incident_carries_the_probable_cause(
 
 
 class _RecordingAlerter:
+    name = "recording"
+
     def __init__(self, fail: bool = False) -> None:
         self.alerts: list[Alert] = []
         self._fail = fail

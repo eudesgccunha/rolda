@@ -44,9 +44,11 @@ def main() -> None:
     for url, alerter_class in channels:
         if url:
             alerters.append(alerter_class(url))
+    incidents = PostgresIncidentStore(settings.postgres_dsn)
     worker = Worker(
         source=ClickHouseSpanSource(settings),
-        store=PostgresIncidentStore(settings.postgres_dsn),
+        store=incidents,
+        outbox=incidents,
         rules=default_rules(settings.detection),
         config=WorkerConfig(),
         alerters=alerters,

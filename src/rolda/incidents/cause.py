@@ -45,6 +45,12 @@ def _path_to(trace: Trace, span_id: str) -> tuple[str, ...]:
     return tuple(reversed(names))
 
 
+def hypothesis_for(rule: str, path: tuple[str, ...], evidence: str) -> str:
+    """Write the hypothesis shown with an incident."""
+    where = " > ".join(path) if path else "unknown span"
+    return f"{rule} at {where}: {evidence}"
+
+
 def probable_cause(trace: Trace, finding: Finding) -> ProbableCause:
     """Build the path from the root to the span behind a finding."""
     path = _path_to(trace, finding.span_id)
@@ -62,6 +68,5 @@ def probable_cause(trace: Trace, finding: Finding) -> ProbableCause:
         )
     agent = agent.replace("|", "_")
     signature = "|".join([agent, finding.rule, operation, error])
-    where = " > ".join(path) if path else "unknown span"
-    hypothesis = f"{finding.rule} at {where}: {finding.evidence}"
+    hypothesis = hypothesis_for(finding.rule, path, finding.evidence)
     return ProbableCause(signature=signature, path=path, hypothesis=hypothesis)

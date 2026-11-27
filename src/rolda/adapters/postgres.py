@@ -2,7 +2,7 @@
 
 import contextlib
 from collections.abc import Sequence
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 
 import psycopg
@@ -13,6 +13,7 @@ from rolda.incidents import (
     Label,
     LabelSource,
     OrderKey,
+    PendingDelivery,
     UnknownIncidentError,
 )
 from rolda.judge import Verdict
@@ -39,6 +40,33 @@ WHERE (%(rule)s::text IS NULL OR rule = %(rule)s::text)
              %(after_rule)s::text))
 ORDER BY detected_at DESC, trace_id DESC, rule DESC
 LIMIT %(limit)s
+"""
+
+_QUEUE_DELIVERY = """
+INSERT INTO alert_deliveries (trace_id, rule, channel) VALUES (%s, %s, %s)
+ON CONFLICT DO NOTHING
+"""
+
+_PENDING = """
+SELECT i.trace_id, i.rule, i.span_id, i.evidence, i.confidence,
+       i.signature, i.path, i.detected_at, d.channel, d.attempts
+FROM alert_deliveries d
+JOIN incidents i ON i.trace_id = d.trace_id AND i.rule = d.rule
+WHERE d.delivered_at IS NULL
+  AND d.attempts < %(max_attempts)s
+  AND (d.last_attempt_at IS NULL
+       OR d.last_attempt_at
+          < now() - d.attempts * %(backoff)s * interval '1 second')
+ORDER BY d.last_attempt_at NULLS FIRST, i.detected_at
+LIMIT %(limit)s
+"""
+
+_MARK_DELIVERY = """
+UPDATE alert_deliveries
+SET attempts = attempts + 1,
+    last_attempt_at = now(),
+    delivered_at = CASE WHEN %s THEN now() END
+WHERE trace_id = %s AND rule = %s AND channel = %s
 """
 
 _FOR_TRACE = """
@@ -69,9 +97,17 @@ class PostgresIncidentStore:
     def __init__(self, dsn: str) -> None:
         self._dsn = dsn
 
-    async def save(self, incident: Incident) -> bool:
-        """Insert the incident. Return True when the row is new."""
-        async with await psycopg.AsyncConnection.connect(self._dsn) as conn:
+    async def save(
+        self, incident: Incident, channels: Sequence[str] = ()
+    ) -> bool:
+        """Insert the incident and queue its alerts in one transaction.
+
+        Return True when the incident row is new.
+        """
+        async with (
+            await psycopg.AsyncConnection.connect(self._dsn) as conn,
+            conn.transaction(),
+        ):
             cursor = await conn.execute(
                 _INSERT,
                 (
@@ -85,7 +121,41 @@ class PostgresIncidentStore:
                     incident.detected_at,
                 ),
             )
-            return cursor.rowcount == 1
+            created = cursor.rowcount == 1
+            if created and channels:
+                cursor = conn.cursor()
+                await cursor.executemany(
+                    _QUEUE_DELIVERY,
+                    [(incident.trace_id, incident.rule, c) for c in channels],
+                )
+            return created
+
+    async def pending(
+        self, *, limit: int, max_attempts: int, backoff: timedelta
+    ) -> Sequence[PendingDelivery]:
+        """Return deliveries that are due for another attempt."""
+        async with await psycopg.AsyncConnection.connect(self._dsn) as conn:
+            cursor = await conn.execute(
+                _PENDING,
+                {
+                    "max_attempts": max_attempts,
+                    "backoff": backoff.total_seconds(),
+                    "limit": limit,
+                },
+            )
+            rows = await cursor.fetchall()
+        return [
+            PendingDelivery(_incident(row[:8]), row[8], row[9]) for row in rows
+        ]
+
+    async def mark_delivery(
+        self, trace_id: str, rule: str, channel: str, *, delivered: bool
+    ) -> None:
+        """Record the result of one attempt."""
+        async with await psycopg.AsyncConnection.connect(self._dsn) as conn:
+            await conn.execute(
+                _MARK_DELIVERY, (delivered, trace_id, rule, channel)
+            )
 
     async def list(
         self,

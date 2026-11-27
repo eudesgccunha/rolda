@@ -12,10 +12,12 @@ from rolda.checkpoints import CheckpointStore, Leadership
 from rolda.detection import Baseline, Rule, suppress_redundant
 from rolda.entrypoints.settings import Settings
 from rolda.incidents import (
+    AlertOutbox,
     Incident,
     IncidentStore,
     probable_cause,
 )
+from rolda.incidents.cause import hypothesis_for
 from rolda.traces import SpanSource, Trace, build_traces
 
 logger = logging.getLogger(__name__)
@@ -28,12 +30,16 @@ class WorkerConfig:
     ``lag`` re-reads the end of the previous window to catch late spans.
     ``baseline_span`` is the history used by the outlier rules.
     ``baseline_refresh`` is how long a built baseline is reused before the
-    history is read again.
+    history is read again. A failed alert is retried up to
+    ``alert_max_attempts`` times, waiting ``alert_backoff`` times the number
+    of failures between tries.
     """
 
     lag: timedelta = timedelta(minutes=2)
     baseline_span: timedelta = timedelta(days=7)
     baseline_refresh: timedelta = timedelta(hours=1)
+    alert_max_attempts: int = 5
+    alert_backoff: timedelta = timedelta(seconds=30)
 
 
 @dataclass(frozen=True, slots=True)
@@ -60,6 +66,7 @@ class Worker:
         config: WorkerConfig,
         clock: Callable[[], datetime] = _utc_now,
         alerters: Sequence[Alerter] = (),
+        outbox: AlertOutbox | None = None,
     ) -> None:
         self._source = source
         self._store = store
@@ -67,6 +74,7 @@ class Worker:
         self._config = config
         self._clock = clock
         self._alerters = alerters
+        self._outbox = outbox
         self._baseline: Baseline | None = None
         self._baseline_start: datetime | None = None
 
@@ -76,6 +84,7 @@ class Worker:
         Running the same window again creates no new incidents, because
         the store keeps one incident per trace and rule.
         """
+        await self._deliver_pending()
         lag = self._config.lag
         spans = await self._source.spans_between(start - lag, end)
         baseline = await self._baseline_for(start)
@@ -85,7 +94,7 @@ class Worker:
         for trace in traces:
             for incident, hypothesis in self._incidents_for(trace, baseline):
                 findings += 1
-                if await self._store.save(incident):
+                if await self._store.save(incident, self._channel_names()):
                     new += 1
                     await self._notify(Alert(incident, hypothesis))
         return WindowResult(
@@ -135,15 +144,62 @@ class Worker:
             )
             yield incident, cause.hypothesis
 
+    def _channel_names(self) -> list[str]:
+        """Channels to queue for a new incident. None without an outbox."""
+        if self._outbox is None:
+            return []
+        return [alerter.name for alerter in self._alerters]
+
     async def _notify(self, alert: Alert) -> None:
         for alerter in self._alerters:
-            try:
-                await alerter.send(alert)
-            except AlertDeliveryError:
-                logger.exception(
-                    "alert delivery failed for trace %s",
-                    alert.incident.trace_id,
+            await self._send(alerter, alert)
+
+    async def _send(self, alerter: Alerter, alert: Alert) -> None:
+        incident = alert.incident
+        try:
+            await alerter.send(alert)
+        except AlertDeliveryError:
+            logger.exception(
+                "alert delivery failed for trace %s", incident.trace_id
+            )
+            delivered = False
+        else:
+            delivered = True
+        if self._outbox is not None:
+            await self._outbox.mark_delivery(
+                incident.trace_id,
+                incident.rule,
+                alerter.name,
+                delivered=delivered,
+            )
+
+    async def _deliver_pending(self) -> None:
+        """Retry alerts that failed before, one channel at a time."""
+        if self._outbox is None:
+            return
+        pending = await self._outbox.pending(
+            limit=50,
+            max_attempts=self._config.alert_max_attempts,
+            backoff=self._config.alert_backoff,
+        )
+        by_name = {alerter.name: alerter for alerter in self._alerters}
+        for delivery in pending:
+            incident = delivery.incident
+            alerter = by_name.get(delivery.channel)
+            if alerter is None:
+                # The channel was removed from the configuration. Count the
+                # attempt so the delivery is dropped after the maximum.
+                await self._outbox.mark_delivery(
+                    incident.trace_id,
+                    incident.rule,
+                    delivery.channel,
+                    delivered=False,
                 )
+                continue
+            hypothesis = hypothesis_for(
+                incident.rule, incident.path, incident.evidence
+            )
+            await self._send(alerter, Alert(incident, hypothesis))
 
 
 class WindowRunner(Protocol):

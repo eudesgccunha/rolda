@@ -79,12 +79,16 @@ class _HttpAlerter:
 class WebhookAlerter(_HttpAlerter):
     """POST the alert as JSON to a URL."""
 
+    name = "webhook"
+
     def _body(self, alert: Alert) -> dict[str, Any]:
         return webhook_payload(alert)
 
 
 class SlackAlerter(_HttpAlerter):
     """POST the alert to a Slack incoming webhook."""
+
+    name = "slack"
 
     def _body(self, alert: Alert) -> dict[str, Any]:
         return {"text": slack_text(alert)}
@@ -93,12 +97,16 @@ class SlackAlerter(_HttpAlerter):
 class GoogleChatAlerter(_HttpAlerter):
     """POST the alert to a Google Chat incoming webhook."""
 
+    name = "google_chat"
+
     def _body(self, alert: Alert) -> dict[str, Any]:
         return {"text": google_chat_text(alert)}
 
 
 class TeamsAlerter(_HttpAlerter):
     """POST an Adaptive Card to a Teams Workflows webhook."""
+
+    name = "teams"
 
     def _body(self, alert: Alert) -> dict[str, Any]:
         return teams_card(alert)

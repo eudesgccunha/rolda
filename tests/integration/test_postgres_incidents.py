@@ -7,7 +7,7 @@ the environment. Run with ``uv run pytest -m integration``.
 import asyncio
 import os
 import secrets
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import psycopg
 import pytest
@@ -110,3 +110,38 @@ def test_list_filters_pages_and_reads_back_a_trace() -> None:
     [found] = asyncio.run(store.for_trace(ids[0]))
     assert found.evidence == "boom"
     assert found.path == ("root", "tool")
+
+
+def test_alerts_are_queued_with_the_incident_and_retried() -> None:
+    store = PostgresIncidentStore(_dsn())
+    trace_id = secrets.token_hex(16)
+    window = timedelta(seconds=0)
+
+    created = asyncio.run(
+        store.save(_incident(trace_id), channels=["slack", "teams"])
+    )
+    again = asyncio.run(store.save(_incident(trace_id), channels=["slack"]))
+
+    def mine() -> list[str]:
+        found = asyncio.run(
+            store.pending(limit=500, max_attempts=3, backoff=window)
+        )
+        return sorted(
+            d.channel for d in found if d.incident.trace_id == trace_id
+        )
+
+    assert (created, again) == (True, False)
+    assert mine() == ["slack", "teams"]
+
+    asyncio.run(
+        store.mark_delivery(trace_id, "span_error", "slack", delivered=True)
+    )
+    assert mine() == ["teams"]
+
+    for _ in range(3):
+        asyncio.run(
+            store.mark_delivery(
+                trace_id, "span_error", "teams", delivered=False
+            )
+        )
+    assert mine() == []
