@@ -97,6 +97,7 @@ def _detection(env: Mapping[str, str]) -> DetectionConfig:
             env, "ROLDA_Z_SPAN_LATENCY", base.span_latency_z
         ),
         token_z=_z_score(env, "ROLDA_Z_TOKENS", base.token_z),
+        span_token_z=_z_score(env, "ROLDA_Z_SPAN_TOKENS", base.span_token_z),
     )
 
 

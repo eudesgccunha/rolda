@@ -68,10 +68,11 @@ value stops the worker at start.
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `ROLDA_Z_THRESHOLD` | 3.5 | Shared threshold, also used by the whole-trace latency rule |
+| `ROLDA_Z_THRESHOLD` | 3.5 | Shared threshold for rules without their own value |
 | `ROLDA_Z_LATENCY` | shared | Whole-trace latency rule only |
 | `ROLDA_Z_SPAN_LATENCY` | 3.0 | Slow model or tool call |
-| `ROLDA_Z_TOKENS` | 2.5 | Token usage of a trace |
+| `ROLDA_Z_TOKENS` | shared | Token usage of a whole trace |
+| `ROLDA_Z_SPAN_TOKENS` | shared | One model call with far more tokens than usual |
 | `ROLDA_MIN_SAMPLES` | 30 | History needed before an outlier rule runs (at least 1) |
 | `ROLDA_TOOL_LOOP_REPEATS` | 3 | Same tool and arguments this many times is a loop (at least 2) |
 

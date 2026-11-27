@@ -25,6 +25,7 @@ def test_each_threshold_can_be_set() -> None:
             "ROLDA_Z_LATENCY": "3.1",
             "ROLDA_Z_SPAN_LATENCY": "2.9",
             "ROLDA_Z_TOKENS": "2.2",
+            "ROLDA_Z_SPAN_TOKENS": "2.7",
             "ROLDA_MIN_SAMPLES": "50",
             "ROLDA_TOOL_LOOP_REPEATS": "5",
         }
@@ -35,6 +36,7 @@ def test_each_threshold_can_be_set() -> None:
     assert detection.latency_z == 3.1
     assert detection.span_latency_z == 2.9
     assert detection.token_z == 2.2
+    assert detection.span_token_z == 2.7
     assert detection.min_samples == 50
     assert detection.tool_loop_repeats == 5
 
@@ -43,6 +45,7 @@ def test_unset_values_keep_their_defaults() -> None:
     settings = load_settings({**ENV, "ROLDA_Z_TOKENS": "2.0"})
 
     assert settings.detection.token_z == 2.0
+    assert settings.detection.span_token_z is None
     assert settings.detection.span_latency_z == 3.0
     assert settings.detection.min_samples == 30
 
@@ -52,6 +55,7 @@ def test_unset_values_keep_their_defaults() -> None:
     [
         ("ROLDA_Z_THRESHOLD", "high"),
         ("ROLDA_Z_TOKENS", "nan"),
+        ("ROLDA_Z_SPAN_TOKENS", "-2"),
         ("ROLDA_Z_LATENCY", "inf"),
         ("ROLDA_Z_SPAN_LATENCY", "0"),
         ("ROLDA_Z_TOKENS", "-1"),

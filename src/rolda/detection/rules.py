@@ -31,7 +31,7 @@ class DetectionConfig:
     min_samples: int = 30
     latency_z: float | None = None
     span_latency_z: float | None = 3.0
-    token_z: float | None = 2.5
+    token_z: float | None = None
     span_token_z: float | None = None
 
     def z_for(self, rule: str) -> float:

@@ -65,10 +65,21 @@ False alarms on healthy sessions: the token rule raised none at any
 threshold. The span latency rule raised 7 and 5 at z 2.5, and 1 and 0 at
 z 3.0 and above.
 
-Decision: `span_latency_z` = 3.0 and `token_z` = 2.5. The whole-trace
-latency rule keeps 3.5. These values fit this simulator (one fault per
+Decision: `span_latency_z` = 3.0. The whole-trace latency rule keeps 3.5.
+`token_z` was first set to 2.5, then reverted to the shared 3.5 once the
+per-span token rule below made it unnecessary. These values fit this simulator (one fault per
 session, a 3-6x slow call, a 5-10x token blowup). Re-check them on real,
 human-labeled traces before trusting them.
+
+## Per-span token rule
+
+`SpanTokenOutlier` scores each LLM span's tokens against spans of the same
+agent and name, on the logarithm, like the per-span latency rule. On the
+same two runs it found 12 of 12 and 11 of 11 injected token blowups at every
+threshold from 2.5 to 4.0, with no healthy session flagged (639 sessions).
+The whole-trace token rule found 7 to 10 of them, and only at z 2.5.
+The per-span rule uses the shared threshold (3.5). A 5-10x blowup in one
+call is easy to separate; real prompt growth may be messier.
 
 ## Consequences
 
@@ -84,4 +95,3 @@ human-labeled traces before trusting them.
 - Thresholds are settable from the environment (`ROLDA_Z_*`,
   `ROLDA_MIN_SAMPLES`, `ROLDA_TOOL_LOOP_REPEATS`). Invalid values stop the
   worker at start. Only the calibrated defaults are tested against data.
-- Next: consider a per-span token rule.
