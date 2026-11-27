@@ -16,6 +16,7 @@
 | [0012](0012-schema-migrations.md) | Versioned schema migrations |
 | [0013](0013-worker-checkpoint-and-leadership.md) | Worker checkpoint and leader lock |
 | [0014](0014-alert-outbox.md) | Alert outbox |
+| [0015](0015-zero-mad-fallback.md) | Outlier score when the MAD is zero |
 
 Add a new record as `NNNN-title.md` when a decision changes the architecture,
 a dependency or a security property.

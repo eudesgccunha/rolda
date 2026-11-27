@@ -185,7 +185,9 @@ def test_outlier_rules_need_enough_samples(make_span: SpanFactory) -> None:
     assert TokenOutlier(config).evaluate(trace, baseline) == ()
 
 
-def test_outlier_rules_ignore_zero_mad(make_span: SpanFactory) -> None:
+def test_outlier_rules_still_flag_an_extreme_value_when_mad_is_zero(
+    make_span: SpanFactory,
+) -> None:
     flat = Baseline.from_traces(
         [
             build_traces(
@@ -206,7 +208,7 @@ def test_outlier_rules_ignore_zero_mad(make_span: SpanFactory) -> None:
         _slow_trace(make_span), flat
     )
 
-    assert result == ()
+    assert [f.rule for f in result] == ["latency_outlier"]
 
 
 def test_default_rules_lists_the_rules() -> None:

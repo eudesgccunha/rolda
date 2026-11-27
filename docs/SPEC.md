@@ -90,7 +90,8 @@ rolda/
 | `token_outlier` | Same calculation on tokens per trace |
 
 The thresholds are starting points, to calibrate with real data. Outlier
-rules need at least 30 samples per agent and ignore a MAD of zero. If the
+rules need at least 30 samples per agent. A MAD of zero falls back to the
+mean absolute deviation (ADR 0015). If the
 tool arguments are not captured, `tool_loop` compares only the name and
 marks the finding as low confidence.
 
