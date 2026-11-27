@@ -155,3 +155,19 @@ def test_labeled_incident_exports_as_an_eval_case() -> None:
     assert case.expected == "incident"
     assert [s.status for s in case.spans] == ["error"]
     assert case.spans[0].operation == "tool"
+
+
+def test_spans_are_read_back_by_trace_id_in_a_batch() -> None:
+    source = ClickHouseSpanSource(load_settings(os.environ))
+    first, second = secrets.token_hex(16), secrets.token_hex(16)
+    _send_failing_span(first)
+    _send_failing_span(second)
+
+    deadline = time.monotonic() + 30
+    found: set[str] = set()
+    while time.monotonic() < deadline and found != {first, second}:
+        spans = asyncio.run(source.spans_for_traces([first, second, "0" * 32]))
+        found = {span.trace_id for span in spans}
+        time.sleep(1)
+
+    assert found == {first, second}

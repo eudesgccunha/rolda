@@ -25,3 +25,10 @@ class InMemorySpanSource:
     async def spans_for_trace(self, trace_id: str) -> Sequence[Span]:
         """Return every span of one trace."""
         return [s for s in self._spans if s.trace_id == trace_id]
+
+    async def spans_for_traces(
+        self, trace_ids: Sequence[str]
+    ) -> Sequence[Span]:
+        """Return every span of each of the given traces."""
+        wanted = set(trace_ids)
+        return [s for s in self._spans if s.trace_id in wanted]

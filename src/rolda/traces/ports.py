@@ -19,3 +19,9 @@ class SpanSource(Protocol):
     async def spans_for_trace(self, trace_id: str) -> Sequence[Span]:
         """Return every span of one trace."""
         ...
+
+    async def spans_for_traces(
+        self, trace_ids: Sequence[str]
+    ) -> Sequence[Span]:
+        """Return every span of each of the given traces."""
+        ...

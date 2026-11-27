@@ -27,7 +27,9 @@ logger = logging.getLogger(__name__)
 class WorkerConfig:
     """Window settings.
 
-    ``lag`` re-reads the end of the previous window to catch late spans.
+    ``lag`` re-reads the end of the previous window to catch late spans. It
+    is also how long a trace may wait for its root span before it is judged
+    without it.
     ``baseline_span`` is the history used by the outlier rules.
     ``baseline_refresh`` is how long a built baseline is reused before the
     history is read again. A failed alert is retried up to
@@ -35,7 +37,7 @@ class WorkerConfig:
     of failures between tries.
     """
 
-    lag: timedelta = timedelta(minutes=2)
+    lag: timedelta = timedelta(minutes=10)
     baseline_span: timedelta = timedelta(days=7)
     baseline_refresh: timedelta = timedelta(hours=1)
     alert_max_attempts: int = 5
@@ -53,6 +55,13 @@ class WindowResult:
 
 def _utc_now() -> datetime:
     return datetime.now(UTC)
+
+
+def _settled(trace: Trace, cutoff: datetime) -> bool:
+    """A trace is ready when its root arrived or it has been quiet long."""
+    if any(span.parent_span_id is None for span in trace.spans):
+        return True
+    return max(span.started_at for span in trace.spans) <= cutoff
 
 
 class Worker:
@@ -86,9 +95,16 @@ class Worker:
         """
         await self._deliver_pending()
         lag = self._config.lag
-        spans = await self._source.spans_between(start - lag, end)
+        seen = await self._source.spans_between(start - lag, end)
+        # Judge whole traces: spans that started before this window count too.
+        trace_ids = sorted({span.trace_id for span in seen})
+        spans = await self._source.spans_for_traces(trace_ids)
         baseline = await self._baseline_for(start)
-        traces = build_traces(spans)
+        traces = [
+            trace
+            for trace in build_traces(spans)
+            if _settled(trace, end - lag)
+        ]
         findings = 0
         new = 0
         for trace in traces:

@@ -33,6 +33,18 @@ ORDER BY Timestamp
 """
 
 
+_TRACES_QUERY = """
+SELECT Timestamp, TraceId, SpanId, ParentSpanId, SpanName, SpanKind,
+       ServiceName, ResourceAttributes, SpanAttributes, Duration,
+       StatusCode, StatusMessage
+FROM otel_traces
+WHERE TraceId IN {trace_ids:Array(String)}
+ORDER BY Timestamp
+"""
+
+_TRACE_ID_BATCH = 500
+
+
 def rows_to_spans(
     rows: Iterable[Mapping[str, Any]],
 ) -> tuple[list[Span], int]:
@@ -88,3 +100,17 @@ class ClickHouseSpanSource:
         return await asyncio.to_thread(
             self._run, _TRACE_QUERY, {"trace_id": trace_id}
         )
+
+    async def spans_for_traces(
+        self, trace_ids: Sequence[str]
+    ) -> Sequence[Span]:
+        """Return every span of each trace, reading ids in batches."""
+        found: list[Span] = []
+        for index in range(0, len(trace_ids), _TRACE_ID_BATCH):
+            batch = list(trace_ids[index : index + _TRACE_ID_BATCH])
+            found.extend(
+                await asyncio.to_thread(
+                    self._run, _TRACES_QUERY, {"trace_ids": batch}
+                )
+            )
+        return found
