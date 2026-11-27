@@ -10,6 +10,7 @@ from fastapi import FastAPI
 from api_support import ApiClient
 from rolda.detection import Confidence
 from rolda.entrypoints.api import create_app
+from rolda.evals import parse_line
 from rolda.incidents import (
     Incident,
     InMemoryIncidentStore,
@@ -206,3 +207,102 @@ def test_hostile_text_stays_json_data(serve_app: ServeApp) -> None:
 
     assert reply.headers["content-type"].startswith("application/json")
     assert reply.json()["incidents"][0]["evidence"] == hostile
+
+
+def test_put_label_stores_a_human_label(
+    serve_app: ServeApp, make_span: SpanFactory
+) -> None:
+    app, labels = _world(make_span)
+    client = serve_app(app, TOKEN)
+
+    reply = client.call(
+        "PUT",
+        "/incidents/t1/span_error/label",
+        body={
+            "verdict": "false_alarm",
+            "reason": "expected",
+            "labeler": "ana",
+        },
+    )
+
+    assert reply.status == 200
+    assert reply.json()["verdict"] == "false_alarm"
+    stored = asyncio.run(labels.for_trace("t1"))
+    assert [(x.source, x.verdict, x.labeler) for x in stored] == [
+        (LabelSource.HUMAN, Verdict.FALSE_ALARM, "ana")
+    ]
+
+
+def test_put_label_for_a_missing_incident_is_404(
+    serve_app: ServeApp, make_span: SpanFactory
+) -> None:
+    client = serve_app(_world(make_span)[0], TOKEN)
+
+    reply = client.call(
+        "PUT",
+        "/incidents/ghost/span_error/label",
+        body={"verdict": "failure", "reason": "", "labeler": "ana"},
+    )
+
+    assert reply.status == 404
+
+
+def test_put_label_validates_the_body(
+    serve_app: ServeApp, make_span: SpanFactory
+) -> None:
+    client = serve_app(_world(make_span)[0], TOKEN)
+    path = "/incidents/t1/span_error/label"
+    good = {"verdict": "failure", "reason": "r", "labeler": "ana"}
+
+    bad_bodies = [
+        {**good, "verdict": "maybe"},
+        {**good, "labeler": ""},
+        {**good, "labeler": "x" * 100},
+        {**good, "reason": "x" * 1000},
+        {**good, "extra": "field"},
+        {"verdict": "failure"},
+    ]
+
+    for body in bad_bodies:
+        assert client.call("PUT", path, body=body).status == 422, body
+
+
+def test_put_label_needs_the_token(
+    serve_app: ServeApp, make_span: SpanFactory
+) -> None:
+    client = serve_app(_world(make_span)[0], TOKEN)
+
+    reply = client.call(
+        "PUT",
+        "/incidents/t1/span_error/label",
+        body={"verdict": "failure", "reason": "", "labeler": "ana"},
+        send_token=False,
+    )
+
+    assert reply.status == 401
+
+
+def test_other_methods_cannot_change_incidents(
+    serve_app: ServeApp, make_span: SpanFactory
+) -> None:
+    client = serve_app(_world(make_span)[0], TOKEN)
+
+    for method in ("POST", "DELETE", "PATCH", "PUT"):
+        reply = client.call(method, "/incidents/t1")
+        assert reply.status in (404, 405), method
+
+
+def test_export_returns_the_eval_file(
+    serve_app: ServeApp, make_span: SpanFactory
+) -> None:
+    client = serve_app(_world(make_span)[0], TOKEN)
+
+    reply = client.call("GET", "/evals/export")
+
+    assert reply.status == 200
+    assert reply.headers["content-type"].startswith("application/x-ndjson")
+    assert "attachment" in reply.headers["content-disposition"]
+    [line] = reply.text.splitlines()
+    case = parse_line(line)
+    assert (case.trace_id, case.expected) == ("t3", "incident")
+    assert "SECRET" not in reply.text

@@ -14,17 +14,22 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException, Path
 from fastapi import Query as QueryParam
-from pydantic import BaseModel
+from fastapi.responses import Response
+from pydantic import BaseModel, ConfigDict, Field
 
+from rolda.evals import build_cases, to_line
 from rolda.incidents import (
     Incident,
     IncidentStore,
     Label,
+    LabelSource,
     LabelStore,
     OrderKey,
+    UnknownIncidentError,
     agent_of,
     order_key,
 )
+from rolda.judge import Verdict
 from rolda.traces import Span, SpanSource
 
 MIN_TOKEN_LENGTH = 16
@@ -94,6 +99,16 @@ class TraceOut(BaseModel):
 
     trace_id: str
     spans: list[SpanOut]
+
+
+class LabelIn(BaseModel):
+    """The body of a label request. Unknown fields are rejected."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    verdict: Verdict
+    reason: str = Field(default="", max_length=500)
+    labeler: str = Field(min_length=1, max_length=64)
 
 
 def _incident_out(incident: Incident) -> IncidentOut:
@@ -246,6 +261,41 @@ def create_app(  # noqa: C901 - one function wires all routes
         ordered = sorted(found, key=lambda s: s.started_at)
         return TraceOut(
             trace_id=trace_id, spans=[_span_out(s) for s in ordered]
+        )
+
+    @protected.put("/incidents/{trace_id}/{rule}/label")
+    async def put_label(
+        trace_id: TraceId,
+        rule: Annotated[str, Path(pattern=r"^[a-z_]{1,64}$")],
+        body: LabelIn,
+    ) -> LabelOut:
+        label = Label(
+            trace_id=trace_id,
+            rule=rule,
+            source=LabelSource.HUMAN,
+            verdict=body.verdict,
+            reason=body.reason,
+            labeler=body.labeler,
+            labeled_at=datetime.now(UTC),
+        )
+        try:
+            await labels.upsert(label)
+        except UnknownIncidentError as exc:
+            raise HTTPException(
+                status_code=404, detail="no such incident"
+            ) from exc
+        return _label_out(label)
+
+    @protected.get("/evals/export")
+    async def export_evals() -> Response:
+        cases = await build_cases(labels, spans)
+        text = "".join(to_line(case) + "\n" for case in cases)
+        return Response(
+            content=text,
+            media_type="application/x-ndjson",
+            headers={
+                "Content-Disposition": 'attachment; filename="evals.jsonl"'
+            },
         )
 
     app.include_router(protected)

@@ -136,3 +136,49 @@ def load_settings(env: Mapping[str, str]) -> Settings:
         teams_webhook_url=_optional_url(env, "ROLDA_TEAMS_WEBHOOK_URL"),
         detection=_detection(env),
     )
+
+
+MIN_API_TOKEN_LENGTH = 16
+
+
+@dataclass(frozen=True, slots=True)
+class ApiSettings:
+    """Settings of the HTTP API. The token is required."""
+
+    token: str
+    host: str = "127.0.0.1"
+    port: int = 8000
+    docs: bool = False
+
+
+def _flag(env: Mapping[str, str], name: str) -> bool:
+    raw = env.get(name)
+    if raw is None:
+        return False
+    if raw.lower() in ("1", "true", "yes"):
+        return True
+    if raw.lower() in ("0", "false", "no"):
+        return False
+    msg = f"{name} must be true or false, got {raw!r}"
+    raise SettingsError(msg)
+
+
+def load_api_settings(env: Mapping[str, str]) -> ApiSettings:
+    """Build the API settings. A short or missing token is an error."""
+    token = _required(env, "ROLDA_API_TOKEN")
+    if len(token) < MIN_API_TOKEN_LENGTH:
+        msg = (
+            f"ROLDA_API_TOKEN must have at least {MIN_API_TOKEN_LENGTH} "
+            "characters"
+        )
+        raise SettingsError(msg)
+    port = _number(env, "ROLDA_API_PORT", 8000)
+    if not 1 <= port <= 65535:
+        msg = f"ROLDA_API_PORT must be between 1 and 65535, got {port}"
+        raise SettingsError(msg)
+    return ApiSettings(
+        token=token,
+        host=env.get("ROLDA_API_HOST", "127.0.0.1"),
+        port=port,
+        docs=_flag(env, "ROLDA_API_DOCS"),
+    )

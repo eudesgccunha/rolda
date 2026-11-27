@@ -107,3 +107,21 @@ answers were `uncertain` (left out of kappa). The model defaults to
 `claude-haiku-5-5`; set `ROLDA_JUDGE_MODEL` to change it. The judge sees
 trace behavior only. See `docs/adr/0008-judge-and-kappa.md`. No kappa value
 is published yet: it needs real human labels.
+
+## HTTP API
+
+The API lists incidents, shows a trace's behavior, records human labels and
+exports the eval file. Everything except `/health` needs a bearer token.
+
+```bash
+export ROLDA_API_TOKEN=...   # at least 16 characters, never commit it
+set -a && . deploy/compose/.env && set +a
+uv run python -m rolda.entrypoints.api_main
+curl -H "Authorization: Bearer $ROLDA_API_TOKEN" \
+  "http://127.0.0.1:8000/incidents?limit=10"
+```
+
+It listens on `127.0.0.1:8000`. Change that with `ROLDA_API_HOST` and
+`ROLDA_API_PORT`, and put TLS in front before you expose it. Set
+`ROLDA_API_DOCS=true` to serve the OpenAPI docs. See
+`docs/adr/0010-http-api.md`.
