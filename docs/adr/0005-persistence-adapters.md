@@ -21,7 +21,7 @@ Compose stack. SPEC.md plans ClickHouse for spans and PostgreSQL for state.
 - `serve` runs contiguous windows and retries a failed window from the same
   start, so a transient database error does not skip spans or end the
   process. A restart still loses the cursor (see `docs/STATUS.md`).
-- `serve` runs contiguous windows. `python -m rolda.entrypoints` starts it.
+  `python -m rolda.entrypoints` starts it.
 
 ## Consequences
 
