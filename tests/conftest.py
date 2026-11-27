@@ -1,10 +1,15 @@
 """Shared test helpers."""
 
-from collections.abc import Callable
+import threading
+import time
+from collections.abc import Callable, Iterator
 from datetime import UTC, datetime, timedelta
 
 import pytest
+import uvicorn
+from fastapi import FastAPI
 
+from api_support import ApiClient
 from rolda.traces import Operation, Span, SpanStatus
 
 T0 = datetime(2026, 11, 26, 10, tzinfo=UTC)
@@ -47,3 +52,32 @@ def make_span() -> Callable[..., Span]:
         )
 
     return factory
+
+
+ServeApp = Callable[[FastAPI, str | None], ApiClient]
+
+
+@pytest.fixture
+def serve_app() -> Iterator[ServeApp]:
+    """Return a function that serves an app and gives a client for it."""
+    servers: list[tuple[uvicorn.Server, threading.Thread]] = []
+
+    def serve(app: FastAPI, token: str | None) -> ApiClient:
+        config = uvicorn.Config(
+            app, host="127.0.0.1", port=0, log_level="warning"
+        )
+        server = uvicorn.Server(config)
+        thread = threading.Thread(target=server.run, daemon=True)
+        thread.start()
+        deadline = time.monotonic() + 10
+        while not server.started and time.monotonic() < deadline:
+            time.sleep(0.01)
+        assert server.started
+        port = server.servers[0].sockets[0].getsockname()[1]
+        servers.append((server, thread))
+        return ApiClient(port, token)
+
+    yield serve
+    for server, thread in servers:
+        server.should_exit = True
+        thread.join(timeout=10)
