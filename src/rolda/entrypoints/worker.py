@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import time
 from collections.abc import Awaitable, Callable, Iterator, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -84,6 +85,21 @@ def register_worker_metrics(metrics: Metrics) -> None:
         "End of the last processed window, as a Unix timestamp.",
     )
     metrics.describe(
+        "rolda_worker_window_duration_seconds",
+        "gauge",
+        "Seconds the last window took to process.",
+    )
+    metrics.describe(
+        "rolda_worker_baseline_build_seconds",
+        "gauge",
+        "Seconds the last baseline build took.",
+    )
+    metrics.describe(
+        "rolda_worker_baseline_traces",
+        "gauge",
+        "Historical traces in the last baseline.",
+    )
+    metrics.describe(
         "rolda_worker_lag_seconds",
         "gauge",
         "Seconds between now and the end of the last processed window.",
@@ -128,6 +144,7 @@ class Worker:
         Running the same window again creates no new incidents, because
         the store keeps one incident per trace and rule.
         """
+        began = time.monotonic()
         await self._deliver_pending()
         lag = self._config.lag
         seen = await self._source.spans_between(start - lag, end)
@@ -148,6 +165,11 @@ class Worker:
                 if await self._store.save(incident, self._channel_names()):
                     new += 1
                     await self._notify(Alert(incident, hypothesis))
+        if self._metrics is not None:
+            self._metrics.set(
+                "rolda_worker_window_duration_seconds",
+                round(time.monotonic() - began, 3),
+            )
         return WindowResult(
             traces=len(traces), findings=findings, new_incidents=new
         )
@@ -164,11 +186,21 @@ class Worker:
             < self._config.baseline_refresh
         ):
             return cached
+        began = time.monotonic()
         history = await self._source.spans_between(
             start - self._config.baseline_span, start - self._config.lag
         )
-        self._baseline = Baseline.from_traces(build_traces(history))
+        history_traces = build_traces(history)
+        self._baseline = Baseline.from_traces(history_traces)
         self._baseline_start = start
+        if self._metrics is not None:
+            self._metrics.set(
+                "rolda_worker_baseline_build_seconds",
+                round(time.monotonic() - began, 3),
+            )
+            self._metrics.set(
+                "rolda_worker_baseline_traces", len(history_traces)
+            )
         return self._baseline
 
     def _incidents_for(

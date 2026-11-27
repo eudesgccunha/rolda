@@ -175,3 +175,25 @@ def test_alert_results_are_counted_per_channel(
             f'rolda_worker_alerts_total{{channel="slack",result="{result}"}} 1'
             in text
         )
+
+
+def test_window_and_baseline_durations_are_reported(
+    make_span: SpanFactory,
+) -> None:
+    metrics = _metrics()
+    store = InMemoryIncidentStore()
+    worker = Worker(
+        source=InMemorySpanSource(_spans(make_span)),
+        store=store,
+        rules=default_rules(DetectionConfig()),
+        config=WorkerConfig(),
+        clock=lambda: _at(60),
+        metrics=metrics,
+    )
+
+    asyncio.run(worker.run_window(_at(0), _at(5)))
+
+    text = metrics.render()
+    assert "rolda_worker_baseline_build_seconds " in text
+    assert "rolda_worker_baseline_traces " in text
+    assert "rolda_worker_window_duration_seconds " in text

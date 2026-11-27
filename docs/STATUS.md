@@ -184,3 +184,13 @@ The plan is in [SPEC.md](SPEC.md).
 | M8a Worker resilience (added) | Done, verified on Docker Compose |
 | M8b Scale (baseline in ClickHouse, pool, load test) | Not started |
 | M8c Kubernetes (sharding, manifests, chaos test) | Not started |
+
+## M8b measurements (2026-11-27, before the baseline change)
+
+Synthetic history in ClickHouse (`examples/load/`), baseline built by the
+current worker: 500,000 spans took 11.7 s and 719 MiB; 1,500,000 spans took
+36.7 s and 2,044 MiB. That is about 1.36 KB per span at peak, linear, so
+about 8 GB and 2.5 minutes at 10 spans per second, and about 80 GB at 100.
+Next step (not done): build the baseline from hourly slices that keep only
+floats, refreshed one hour at a time. The first test for it was written but
+is not committed yet.
