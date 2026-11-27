@@ -90,6 +90,7 @@ docker compose --profile app up -d --build
 curl http://127.0.0.1:8000/health
 ```
 
+If port 8000 is taken, set `ROLDA_API_HOST_PORT` (for example 8001).
 `docker compose up` without `--profile app` still starts only the
 infrastructure. The API is published on `127.0.0.1` only. See
 `docs/adr/0011-container-image.md`.

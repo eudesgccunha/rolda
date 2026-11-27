@@ -103,10 +103,11 @@ services:
       # keeps working. The API refuses to start without a token.
       ROLDA_API_TOKEN: ${ROLDA_API_TOKEN:-}
       # Listens on all interfaces inside the container only. The published
-      # port below is bound to the host loopback.
+      # port below is bound to the host loopback. Change the host port with
+      # ROLDA_API_HOST_PORT if 8000 is taken.
       ROLDA_API_HOST: 0.0.0.0
     ports:
-      - "127.0.0.1:8000:8000"
+      - "127.0.0.1:${ROLDA_API_HOST_PORT:-8000}:8000"
     depends_on:
       clickhouse:
         condition: service_healthy
