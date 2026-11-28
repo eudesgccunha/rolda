@@ -15,6 +15,7 @@ proven, what is not, and what is needed to close the gap.
 | Detection (6 rules) | Working, thresholds calibrated on **simulated** data only |
 | Incidents, probable cause, idempotent storage | Working, verified on PostgreSQL |
 | Alerts (webhook, Slack, Google Chat, Teams) | Working, payloads verified against a real HTTP receiver; **not** rendered in real chat apps. Failed deliveries are retried per channel (outbox, M8a) |
+| Kubernetes manifests (Kustomize), sharding | Validated, and run on a local kind cluster with pods killed (ADR 0020). Not run on a real multi-node cluster |
 | Worker resilience (checkpoint, leader lock, whole traces, migrations, probes, metrics) | M8a implemented and verified on Docker Compose: integration tests pass and a kill test lost nothing. Not run on Kubernetes or under load |
 | Labels and eval export (JSONL) | Working |
 | Judge adapter (Anthropic) and kappa measurement | Implemented and tested against a fake API; **never run against the real API**; **no kappa published** |
@@ -44,13 +45,16 @@ proven, what is not, and what is needed to close the gap.
 
 ## What is not proven
 
-0. **Kubernetes and long runs.** The worker survived a kill test on one
+0. **A real Kubernetes cluster and long runs.** The worker survived a kill test on one
    developer machine (Docker Compose, two replicas): during a 300-session run
    the leader was killed three times. Windows stayed contiguous, no incident
    was lost or duplicated, and recall on errors, loops and token outliers was
    unchanged (see below). Stopping the leader without a restart moved the work
-   to the standby in 29 seconds. This was **not** run on Kubernetes, for
-   hours, under load, or with the databases failing.
+   to the standby in 29 seconds. The same kind of test then ran on a local
+   kind cluster (one node, throwaway databases) with pods deleted, including
+   PostgreSQL: nothing was lost or duplicated, and two shards split the work as
+   predicted (ADR 0020). It was **not** run on a real multi-node cluster, for
+   hours, under high load, with a node lost, or with ClickHouse failing.
 
 1. **Real agent traffic.** Every trace so far comes from fixtures or the
    simulated agent. Thresholds, false-alarm rates and recall on real
@@ -123,7 +127,7 @@ Still limits:
   See the extrapolation above; there is no test beyond 100 spans per second.
 - The databases are single nodes, and the Collector queue is in memory, so a
   killed Collector pod loses its batch.
-- There are no Kubernetes manifests or Helm chart yet, and no load test.
+- The OTLP receiver has no authentication, and there is no Helm chart.
 
 Fine for a small deployment (a few spans per second). Not ready for high
 volume. The plan for the rest of M8 is in the project history: baseline in
@@ -182,7 +186,7 @@ The plan is in [SPEC.md](SPEC.md).
 | M7 HTTP API (added) | Done |
 | M8a Worker resilience (added) | Done, verified on Docker Compose |
 | M8b Scale (baseline slices, pool, agent index, load test) | Done; measured up to 100 spans/s for 2 minutes |
-| M8c Kubernetes (sharding, manifests, chaos test) | Not started |
+| M8c Kubernetes (sharding, manifests, kill test) | Done on a local kind cluster; OTLP authentication not done |
 
 ## M8b measurements (2026-11-27)
 

@@ -138,6 +138,12 @@ on your own traces. Lower values catch more and raise more false alarms.
 | `ROLDA_MIN_SAMPLES` | 30 | History needed before an outlier rule runs |
 | `ROLDA_TOOL_LOOP_REPEATS` | 3 | Same tool and arguments this many times is a loop |
 
+## Kubernetes
+
+Kustomize manifests for the API, the sharded worker and a collector with a disk
+queue are in [`deploy/k8s`](deploy/k8s/README.md). They do not include the
+databases. See ADR 0020 for what was tested and what was not.
+
 ## Security
 
 - Every Compose port is bound to `127.0.0.1`. The OTLP receiver and the

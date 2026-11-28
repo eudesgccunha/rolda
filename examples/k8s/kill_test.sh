@@ -3,7 +3,7 @@
 # agent sessions is sent. Prints what was found against the ground truth.
 #
 # Needs: docker, kind, kubectl, uv. Takes a few minutes (it pulls images).
-# Usage: kill_test.sh [SESSIONS]   (default 200)
+# Usage: [REUSE=1] kill_test.sh [SESSIONS]   (default 200)
 set -euo pipefail
 ROOT=$(cd "$(dirname "$0")/../.." && pwd)
 NAME=rolda-test
@@ -12,19 +12,22 @@ OUT=${OUT:-/tmp/rolda-kill-test}
 mkdir -p "$OUT"
 K="kubectl --context kind-$NAME -n rolda"
 
-kind delete cluster --name "$NAME" >/dev/null 2>&1 || true
-kind create cluster --name "$NAME" --config "$ROOT/deploy/k8s/kind.yaml"
-docker build -q -f "$ROOT/deploy/docker/Dockerfile" -t rolda:dev "$ROOT" >/dev/null
-kind load docker-image rolda:dev --name "$NAME"
+# REUSE=1 keeps the cluster and its secret, and only reapplies the manifests.
+if [ -z "${REUSE:-}" ]; then
+  kind delete cluster --name "$NAME" >/dev/null 2>&1 || true
+  kind create cluster --name "$NAME" --config "$ROOT/deploy/k8s/kind.yaml"
+  docker build -q -f "$ROOT/deploy/docker/Dockerfile" -t rolda:dev "$ROOT" >/dev/null
+  kind load docker-image rolda:dev --name "$NAME"
 
-kubectl --context "kind-$NAME" apply -f - <<<'{"apiVersion":"v1","kind":"Namespace","metadata":{"name":"rolda"}}'
-# Random credentials, created here and never written to a file.
-$K create secret generic rolda-secrets \
-  --from-literal=CLICKHOUSE_USER=rolda \
-  --from-literal=CLICKHOUSE_PASSWORD="$(openssl rand -hex 16)" \
-  --from-literal=POSTGRES_USER=rolda \
-  --from-literal=POSTGRES_PASSWORD="$(openssl rand -hex 16)" \
-  --from-literal=ROLDA_API_TOKEN="$(openssl rand -hex 24)"
+  kubectl --context "kind-$NAME" apply -f - <<<'{"apiVersion":"v1","kind":"Namespace","metadata":{"name":"rolda"}}'
+  # Random credentials, created here and never written to a file.
+  $K create secret generic rolda-secrets \
+    --from-literal=CLICKHOUSE_USER=rolda \
+    --from-literal=CLICKHOUSE_PASSWORD="$(openssl rand -hex 16)" \
+    --from-literal=POSTGRES_USER=rolda \
+    --from-literal=POSTGRES_PASSWORD="$(openssl rand -hex 16)" \
+    --from-literal=ROLDA_API_TOKEN="$(openssl rand -hex 24)"
+fi
 kubectl --context "kind-$NAME" apply -k "$ROOT/deploy/k8s/overlays/dev"
 
 $K rollout status statefulset/clickhouse --timeout=600s
