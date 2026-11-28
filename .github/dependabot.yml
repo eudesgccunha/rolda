@@ -40,10 +40,15 @@ updates:
       interval: weekly
     cooldown:
       default-days: 7
-    # A database major version needs a migration plan and the integration
-    # tests, so it is upgraded by hand, never by an automatic pull request.
+    # A database version change needs a plan and the integration and kill
+    # tests, so it is made by hand, never by an automatic pull request.
+    # ClickHouse is pinned to a long term support line (25.8). Its monthly
+    # releases get a short support window, and the next LTS is a decision for
+    # a person. Only patch updates of the pinned line arrive here.
     ignore:
       - dependency-name: clickhouse/clickhouse-server
-        update-types: ["version-update:semver-major"]
+        update-types:
+          - "version-update:semver-major"
+          - "version-update:semver-minor"
       - dependency-name: postgres
         update-types: ["version-update:semver-major"]
