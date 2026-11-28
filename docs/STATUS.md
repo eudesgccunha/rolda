@@ -111,13 +111,12 @@ Done in M8a: a checkpoint and a leader lock (so a second replica is a hot
 standby, not a duplicate), whole-trace evaluation, versioned migrations, a
 readiness probe, worker health and Prometheus metrics, and an alert outbox.
 
-Still limits, planned for M8b and M8c:
+Still limits:
 
-- The worker loads the 7-day baseline as Python objects every hour. By the
-  measurement above, 10 spans per second needs roughly 3 GB for the baseline
-  alone and 100 spans per second roughly 27 GB (an estimate, and it ignores
-  the raw rows held at the same time). The baseline should be computed inside
-  ClickHouse instead.
+- The baseline no longer holds spans (ADR 0017): memory is nearly flat in
+  the size of the history. A cold start still reads 7 days in slices, which
+  at 100 spans per second would take on the order of 25 minutes (an
+  extrapolation), during which outlier rules are quiet.
 - Only the leader works, so extra replicas add availability, not throughput.
   Scaling out needs a partition by trace id.
 - Every database call opens its own connection, and the `agent` filter of the
@@ -185,12 +184,21 @@ The plan is in [SPEC.md](SPEC.md).
 | M8b Scale (baseline in ClickHouse, pool, load test) | Not started |
 | M8c Kubernetes (sharding, manifests, chaos test) | Not started |
 
-## M8b measurements (2026-11-27, before the baseline change)
+## M8b measurements (2026-11-27)
 
-Synthetic history in ClickHouse (`examples/load/`), baseline built by the
-current worker: 500,000 spans took 11.7 s and 719 MiB; 1,500,000 spans took
-36.7 s and 2,044 MiB. That is about 1.36 KB per span at peak, linear, so
-about 8 GB and 2.5 minutes at 10 spans per second, and about 80 GB at 100.
-Next step (not done): build the baseline from hourly slices that keep only
-floats, refreshed one hour at a time. The first test for it was written but
-is not committed yet.
+Synthetic history in ClickHouse (`examples/load/`), measured on one developer
+machine with `examples/load/measure_baseline.sh`:
+
+| History | Before | After (ADR 0017) |
+|---|---|---|
+| 500,000 spans | 11.7 s, 719 MiB, window blocked | 27.8 s in the background, 52 MiB, window 0.025 s |
+| 1,500,000 spans | 36.7 s, 2,044 MiB, window blocked | 52.2 s in the background, 66 MiB, window 0.025 s |
+
+Before, the cost was about 1.36 KB per span and grew with the history. Now the
+memory is nearly flat. Extrapolating the old way, 10 spans per second would
+have needed about 8 GB and 100 spans per second about 80 GB. The new way needs
+about 14 bytes per span above the interpreter (an estimate from two points).
+Building from nothing is slower, but it runs in the background once, at start.
+
+Not measured yet: live load at 10 and 100 spans per second, and the cost of a
+cold start at that scale.
