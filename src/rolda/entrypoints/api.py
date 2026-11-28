@@ -10,9 +10,16 @@ import binascii
 import hmac
 import json
 import logging
-from collections.abc import Awaitable, Callable, Mapping
+from collections.abc import (
+    AsyncIterator,
+    Awaitable,
+    Callable,
+    Mapping,
+    Sequence,
+)
+from contextlib import asynccontextmanager
 from datetime import UTC, datetime
-from typing import Annotated
+from typing import Annotated, Protocol
 
 from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException, Path
 from fastapi import Query as QueryParam
@@ -40,6 +47,18 @@ MIN_TOKEN_LENGTH = 16
 MAX_LIMIT = 200
 
 TraceId = Annotated[str, Path(pattern=r"^[A-Za-z0-9_-]{1,128}$")]
+
+
+class Resource(Protocol):
+    """Something the app opens at startup and closes at shutdown."""
+
+    async def open(self) -> None:
+        """Open it."""
+        ...
+
+    async def close(self) -> None:
+        """Close it."""
+        ...
 
 
 class IncidentOut(BaseModel):
@@ -205,12 +224,25 @@ def create_app(  # noqa: C901 - one function wires all routes
     docs: bool = False,
     readiness: Mapping[str, Callable[[], Awaitable[None]]] | None = None,
     readiness_timeout: float = 3.0,
+    resources: Sequence[Resource] = (),
 ) -> FastAPI:
     """Build the API around the given stores and bearer token."""
     if len(token) < MIN_TOKEN_LENGTH:
         msg = f"token must have at least {MIN_TOKEN_LENGTH} characters"
         raise ValueError(msg)
+
+    @asynccontextmanager
+    async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+        for resource in resources:
+            await resource.open()
+        try:
+            yield
+        finally:
+            for resource in reversed(resources):
+                await resource.close()
+
     app = FastAPI(
+        lifespan=lifespan,
         title="Rolda",
         docs_url="/docs" if docs else None,
         redoc_url="/redoc" if docs else None,

@@ -19,6 +19,7 @@
 | [0015](0015-zero-mad-fallback.md) | Outlier score when the MAD is zero |
 | [0016](0016-probes-and-metrics.md) | Probes and metrics |
 | [0017](0017-baseline-from-slices.md) | Baseline built from slices, in the background |
+| [0018](0018-connection-pool-and-agent-column.md) | Connection pool and an indexed agent column |
 
 Add a new record as `NNNN-title.md` when a decision changes the architecture,
 a dependency or a security property.

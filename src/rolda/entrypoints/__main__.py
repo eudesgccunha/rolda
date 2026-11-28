@@ -9,6 +9,8 @@ import sys
 from collections.abc import Callable
 from datetime import timedelta
 
+from psycopg_pool import AsyncConnectionPool
+
 from rolda.adapters.clickhouse import ClickHouseSpanSource
 from rolda.adapters.postgres import (
     PostgresCheckpointStore,
@@ -52,7 +54,13 @@ def main() -> None:
     for url, alerter_class in channels:
         if url:
             alerters.append(alerter_class(url))
-    incidents = PostgresIncidentStore(settings.postgres_dsn)
+    pool = AsyncConnectionPool(
+        settings.postgres_dsn,
+        min_size=1,
+        max_size=settings.postgres_pool_size,
+        open=False,
+    )
+    incidents = PostgresIncidentStore(settings.postgres_dsn, pool)
     metrics = Metrics()
     register_worker_metrics(metrics)
     worker = Worker(
@@ -64,10 +72,15 @@ def main() -> None:
         alerters=alerters,
         metrics=metrics,
     )
-    asyncio.run(_serve(worker, settings, metrics))
+    asyncio.run(_serve(worker, settings, metrics, pool))
 
 
-async def _serve(worker: Worker, settings: Settings, metrics: Metrics) -> None:
+async def _serve(
+    worker: Worker,
+    settings: Settings,
+    metrics: Metrics,
+    pool: AsyncConnectionPool,
+) -> None:
     """Run until SIGTERM or SIGINT, then release the lock and return."""
     stop = asyncio.Event()
     loop = asyncio.get_running_loop()
@@ -93,18 +106,20 @@ async def _serve(worker: Worker, settings: Settings, metrics: Metrics) -> None:
             settings.status_host,
             settings.status_port,
         )
+    await pool.open()
     try:
         await serve(
             worker,
             settings,
             sleep=sleep,
-            checkpoints=PostgresCheckpointStore(settings.postgres_dsn),
+            checkpoints=PostgresCheckpointStore(settings.postgres_dsn, pool),
             leadership=PostgresLeadership(settings.postgres_dsn),
             stop=stop,
             metrics=metrics,
         )
     finally:
         await status.stop()
+        await pool.close()
 
 
 if __name__ == "__main__":

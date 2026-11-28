@@ -254,3 +254,16 @@ def test_status_server_can_be_moved() -> None:
 def test_status_port_must_be_valid(value: str) -> None:
     with pytest.raises(SettingsError, match="ROLDA_STATUS_PORT"):
         load_settings({**ENV, "ROLDA_STATUS_PORT": value})
+
+
+def test_the_database_pool_has_a_default_size_and_can_change() -> None:
+    assert load_settings(ENV).postgres_pool_size == 5
+    settings = load_settings({**ENV, "ROLDA_POSTGRES_POOL_SIZE": "12"})
+
+    assert settings.postgres_pool_size == 12
+
+
+@pytest.mark.parametrize("value", ["0", "-1", "many"])
+def test_the_pool_size_must_be_positive(value: str) -> None:
+    with pytest.raises(SettingsError, match="ROLDA_POSTGRES_POOL_SIZE"):
+        load_settings({**ENV, "ROLDA_POSTGRES_POOL_SIZE": value})

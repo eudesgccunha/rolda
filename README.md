@@ -112,6 +112,7 @@ Everything comes from the environment. Secrets never go in the repository.
 | `ROLDA_CLICKHOUSE_HOST/PORT`, `ROLDA_POSTGRES_HOST/PORT` | loopback | Database addresses |
 | `ROLDA_JUDGE_MODEL` | `claude-haiku-5-5` | Model for `judge-eval` |
 | `ROLDA_STATUS_HOST`, `ROLDA_STATUS_PORT` | `127.0.0.1`, `9100` | Worker `/healthz` and `/metrics` |
+| `ROLDA_POSTGRES_POOL_SIZE` | `5` | Most PostgreSQL connections per process |
 
 Alert channels. Each is optional and must be an http or https URL. These
 URLs are secrets, and Rolda never logs them.

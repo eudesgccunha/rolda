@@ -1,9 +1,10 @@
 """PostgreSQL adapter for the ``IncidentStore`` port."""
 
 import contextlib
-from collections.abc import Sequence
+from collections.abc import AsyncIterator, Sequence
+from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from datetime import datetime, timedelta
-from typing import Any
+from typing import Any, Protocol
 
 import psycopg
 
@@ -15,14 +16,46 @@ from rolda.incidents import (
     OrderKey,
     PendingDelivery,
     UnknownIncidentError,
+    agent_of,
 )
 from rolda.judge import Verdict
+
+
+class ConnectionSource(Protocol):
+    """Anything that lends a connection, such as a psycopg pool."""
+
+    def connection(self) -> AbstractAsyncContextManager[Any]:
+        """Lend a connection, committing or rolling back on exit."""
+        ...
+
+
+class PostgresConnections:
+    """Lend a connection from a pool, or open one when there is no pool.
+
+    A pool avoids a new connection per call. Without it, behavior is the
+    same as before, which is what the CLI and the tests use.
+    """
+
+    def __init__(self, dsn: str, pool: ConnectionSource | None = None) -> None:
+        self._dsn = dsn
+        self._pool = pool
+
+    @asynccontextmanager
+    async def connection(self) -> AsyncIterator[psycopg.AsyncConnection]:
+        """Lend a connection for one unit of work."""
+        if self._pool is not None:
+            async with self._pool.connection() as conn:
+                yield conn
+            return
+        async with await psycopg.AsyncConnection.connect(self._dsn) as conn:
+            yield conn
+
 
 _INSERT = """
 INSERT INTO incidents
     (trace_id, rule, span_id, evidence, confidence, signature, path,
-     detected_at)
-VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+     detected_at, agent)
+VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
 ON CONFLICT (trace_id, rule) DO NOTHING
 """
 
@@ -32,8 +65,7 @@ SELECT trace_id, rule, span_id, evidence, confidence, signature, path,
        detected_at
 FROM incidents
 WHERE (%(rule)s::text IS NULL OR rule = %(rule)s::text)
-  AND (%(agent)s::text IS NULL
-       OR split_part(signature, '|', 1) = %(agent)s::text)
+  AND (%(agent)s::text IS NULL OR agent = %(agent)s::text)
   AND (%(after_time)s::timestamptz IS NULL
        OR (detected_at, trace_id, rule)
           < (%(after_time)s::timestamptz, %(after_trace)s::text,
@@ -94,8 +126,9 @@ def _incident(row: Sequence[Any]) -> Incident:
 class PostgresIncidentStore:
     """Store incidents in PostgreSQL, one row per trace and rule."""
 
-    def __init__(self, dsn: str) -> None:
+    def __init__(self, dsn: str, pool: ConnectionSource | None = None) -> None:
         self._dsn = dsn
+        self._db = PostgresConnections(dsn, pool)
 
     async def save(
         self, incident: Incident, channels: Sequence[str] = ()
@@ -104,10 +137,7 @@ class PostgresIncidentStore:
 
         Return True when the incident row is new.
         """
-        async with (
-            await psycopg.AsyncConnection.connect(self._dsn) as conn,
-            conn.transaction(),
-        ):
+        async with self._db.connection() as conn, conn.transaction():
             cursor = await conn.execute(
                 _INSERT,
                 (
@@ -119,6 +149,7 @@ class PostgresIncidentStore:
                     incident.signature,
                     list(incident.path),
                     incident.detected_at,
+                    agent_of(incident),
                 ),
             )
             created = cursor.rowcount == 1
@@ -134,7 +165,7 @@ class PostgresIncidentStore:
         self, *, limit: int, max_attempts: int, backoff: timedelta
     ) -> Sequence[PendingDelivery]:
         """Return deliveries that are due for another attempt."""
-        async with await psycopg.AsyncConnection.connect(self._dsn) as conn:
+        async with self._db.connection() as conn:
             cursor = await conn.execute(
                 _PENDING,
                 {
@@ -152,7 +183,7 @@ class PostgresIncidentStore:
         self, trace_id: str, rule: str, channel: str, *, delivered: bool
     ) -> None:
         """Record the result of one attempt."""
-        async with await psycopg.AsyncConnection.connect(self._dsn) as conn:
+        async with self._db.connection() as conn:
             await conn.execute(
                 _MARK_DELIVERY, (delivered, trace_id, rule, channel)
             )
@@ -174,14 +205,14 @@ class PostgresIncidentStore:
             "after_trace": after[1] if after else None,
             "after_rule": after[2] if after else None,
         }
-        async with await psycopg.AsyncConnection.connect(self._dsn) as conn:
+        async with self._db.connection() as conn:
             cursor = await conn.execute(_LIST, params)
             rows = await cursor.fetchall()
         return [_incident(row) for row in rows]
 
     async def for_trace(self, trace_id: str) -> Sequence[Incident]:
         """Return every incident of one trace."""
-        async with await psycopg.AsyncConnection.connect(self._dsn) as conn:
+        async with self._db.connection() as conn:
             cursor = await conn.execute(_FOR_TRACE, (trace_id,))
             rows = await cursor.fetchall()
         return [_incident(row) for row in rows]
@@ -218,12 +249,13 @@ FROM labels WHERE trace_id = %s ORDER BY rule, source
 class PostgresLabelStore:
     """Store labels in PostgreSQL, one row per incident and source."""
 
-    def __init__(self, dsn: str) -> None:
+    def __init__(self, dsn: str, pool: ConnectionSource | None = None) -> None:
         self._dsn = dsn
+        self._db = PostgresConnections(dsn, pool)
 
     async def upsert(self, label: Label) -> None:
         """Insert or replace a label for an existing incident."""
-        async with await psycopg.AsyncConnection.connect(self._dsn) as conn:
+        async with self._db.connection() as conn:
             try:
                 await conn.execute(
                     _UPSERT_LABEL,
@@ -245,7 +277,7 @@ class PostgresLabelStore:
 
     async def for_trace(self, trace_id: str) -> Sequence[Label]:
         """Return the labels of every incident of one trace."""
-        async with await psycopg.AsyncConnection.connect(self._dsn) as conn:
+        async with self._db.connection() as conn:
             cursor = await conn.execute(_LABELS_FOR_TRACE, (trace_id,))
             rows = await cursor.fetchall()
         return [
@@ -265,7 +297,7 @@ class PostgresLabelStore:
         self, source: LabelSource
     ) -> Sequence[tuple[Incident, Label]]:
         """Return labeled incidents from one source."""
-        async with await psycopg.AsyncConnection.connect(self._dsn) as conn:
+        async with self._db.connection() as conn:
             cursor = await conn.execute(_LABELED, (source.value,))
             rows = await cursor.fetchall()
         return [
@@ -294,12 +326,13 @@ ON CONFLICT (name) DO UPDATE SET cursor = EXCLUDED.cursor, updated_at = now()
 class PostgresCheckpointStore:
     """Keep the worker cursor in the ``worker_state`` table."""
 
-    def __init__(self, dsn: str) -> None:
+    def __init__(self, dsn: str, pool: ConnectionSource | None = None) -> None:
         self._dsn = dsn
+        self._db = PostgresConnections(dsn, pool)
 
     async def get(self, name: str) -> datetime | None:
         """Return the saved cursor, or None if there is none."""
-        async with await psycopg.AsyncConnection.connect(self._dsn) as conn:
+        async with self._db.connection() as conn:
             cursor = await conn.execute(
                 "SELECT cursor FROM worker_state WHERE name = %s", (name,)
             )
@@ -308,7 +341,7 @@ class PostgresCheckpointStore:
 
     async def set(self, name: str, value: datetime) -> None:
         """Save the cursor."""
-        async with await psycopg.AsyncConnection.connect(self._dsn) as conn:
+        async with self._db.connection() as conn:
             await conn.execute(_UPSERT_CURSOR, (name, value))
 
 
