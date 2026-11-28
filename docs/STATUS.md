@@ -119,8 +119,8 @@ Still limits:
   extrapolation), during which outlier rules are quiet.
 - Only the leader works, so extra replicas add availability, not throughput.
   Scaling out needs a partition by trace id.
-- Every database call opens its own connection, and the `agent` filter of the
-  API has no index.
+- Window time grows with the rate (each window rereads 15 minutes of spans).
+  See the extrapolation above; there is no test beyond 100 spans per second.
 - The databases are single nodes, and the Collector queue is in memory, so a
   killed Collector pod loses its batch.
 - There are no Kubernetes manifests or Helm chart yet, and no load test.
@@ -181,7 +181,7 @@ The plan is in [SPEC.md](SPEC.md).
 | M6 Judge adapter | Adapter and kappa tooling done; **kappa not measured** |
 | M7 HTTP API (added) | Done |
 | M8a Worker resilience (added) | Done, verified on Docker Compose |
-| M8b Scale (baseline in ClickHouse, pool, load test) | Not started |
+| M8b Scale (baseline slices, pool, agent index, load test) | Done; measured up to 100 spans/s for 2 minutes |
 | M8c Kubernetes (sharding, manifests, chaos test) | Not started |
 
 ## M8b measurements (2026-11-27)
@@ -200,5 +200,20 @@ have needed about 8 GB and 100 spans per second about 80 GB. The new way needs
 about 14 bytes per span above the interpreter (an estimate from two points).
 Building from nothing is slower, but it runs in the background once, at start.
 
-Not measured yet: live load at 10 and 100 spans per second, and the cost of a
-cold start at that scale.
+Live load through the Collector (`examples/load/live_load.sh`), 120 seconds
+each, healthy traces, one worker:
+
+| Rate | Spans sent | Failed | Window time | Lag | Worker memory |
+|---|---|---|---|---|---|
+| 10 spans/s | 1,200 | 0 | 0.03 to 0.12 s | 0 | 62 to 82 MiB |
+| 100 spans/s | 12,000 | 0 | 0.12 to 0.68 s | 0 | 82 to 88 MiB |
+
+No false incident was raised. Memory stayed flat.
+
+Not measured: a steady state. The load lasted 2 minutes, and each window
+rereads the last 15 minutes (5 minute window plus 10 minutes of lag), so the
+window time was still growing. From these points (about 57 microseconds per
+span in range) a steady 100 spans per second would take about 5 seconds per
+window, and the interval of 60 seconds would be reached at roughly 1,000
+spans per second. That is an extrapolation. Also not measured: the cold start
+at this scale, and the Collector and ClickHouse under load.
