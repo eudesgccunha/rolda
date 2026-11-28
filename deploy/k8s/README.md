@@ -8,7 +8,7 @@ or a managed service) and create the Secret `rolda-secrets` from
 
 ```bash
 # 1. Build or pull the image and set it in your own overlay:
-#    images: [{name: rolda, newName: your.registry/rolda, newTag: "0.1.0"}]
+#    images: [{name: rolda, newName: your.registry/rolda, newTag: "0.1.0rc1"}]
 # 2. Create the namespace and the Secret.
 # 3. Apply:
 kubectl apply -k your-overlay
