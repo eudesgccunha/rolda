@@ -191,7 +191,11 @@ def test_window_and_baseline_durations_are_reported(
         metrics=metrics,
     )
 
-    asyncio.run(worker.run_window(_at(0), _at(5)))
+    async def scenario() -> None:
+        await worker.run_window(_at(0), _at(5))
+        await worker.wait_for_baseline()
+
+    asyncio.run(scenario())
 
     text = metrics.render()
     assert "rolda_worker_baseline_build_seconds " in text

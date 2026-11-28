@@ -11,6 +11,7 @@ from typing import Protocol
 from rolda.alerts import Alert, AlertDeliveryError, Alerter
 from rolda.checkpoints import CheckpointStore, Leadership
 from rolda.detection import Baseline, Rule, suppress_redundant
+from rolda.detection.history import BaselineHistory
 from rolda.entrypoints.settings import Settings
 from rolda.incidents import (
     AlertOutbox,
@@ -33,15 +34,17 @@ class WorkerConfig:
     is also how long a trace may wait for its root span before it is judged
     without it.
     ``baseline_span`` is the history used by the outlier rules.
-    ``baseline_refresh`` is how long a built baseline is reused before the
-    history is read again. A failed alert is retried up to
-    ``alert_max_attempts`` times, waiting ``alert_backoff`` times the number
-    of failures between tries.
+    ``baseline_refresh`` is how long a built baseline is reused before it is
+    refreshed in the background. The history is read in slices of
+    ``baseline_slice``, and a refresh reads only the slices it lacks. A failed
+    alert is retried up to ``alert_max_attempts`` times, waiting
+    ``alert_backoff`` times the number of failures between tries.
     """
 
     lag: timedelta = timedelta(minutes=10)
     baseline_span: timedelta = timedelta(days=7)
     baseline_refresh: timedelta = timedelta(hours=1)
+    baseline_slice: timedelta = timedelta(minutes=15)
     alert_max_attempts: int = 5
     alert_backoff: timedelta = timedelta(seconds=30)
 
@@ -135,8 +138,15 @@ class Worker:
         self._alerters = alerters
         self._outbox = outbox
         self._metrics = metrics
-        self._baseline: Baseline | None = None
-        self._baseline_start: datetime | None = None
+        self._baseline = Baseline.from_samples([])
+        self._baseline_built_at: datetime | None = None
+        self._history = BaselineHistory(
+            source,
+            span=config.baseline_span,
+            slice_size=config.baseline_slice,
+            lag=config.lag,
+        )
+        self._refresh_task: asyncio.Task[None] | None = None
 
     async def run_window(self, start: datetime, end: datetime) -> WindowResult:
         """Process ``[start, end)`` plus the lag before it.
@@ -151,7 +161,7 @@ class Worker:
         # Judge whole traces: spans that started before this window count too.
         trace_ids = sorted({span.trace_id for span in seen})
         spans = await self._source.spans_for_traces(trace_ids)
-        baseline = await self._baseline_for(start)
+        baseline = self._baseline_for(start)
         traces = [
             trace
             for trace in build_traces(spans)
@@ -174,34 +184,47 @@ class Worker:
             traces=len(traces), findings=findings, new_incidents=new
         )
 
-    async def _baseline_for(self, start: datetime) -> Baseline:
-        """Return the cached baseline, rebuilding it when it is stale."""
-        cached = self._baseline
-        built_at = self._baseline_start
-        if (
-            cached is not None
-            and built_at is not None
-            and timedelta(0)
-            <= start - built_at
-            < self._config.baseline_refresh
-        ):
-            return cached
-        began = time.monotonic()
-        history = await self._source.spans_between(
-            start - self._config.baseline_span, start - self._config.lag
+    def _baseline_for(self, start: datetime) -> Baseline:
+        """Return the current baseline, refreshing it in the background.
+
+        A window never waits for the history: the first one after a start
+        runs with an empty baseline, so outlier rules stay quiet until the
+        first refresh finishes. Errors and loops do not need it.
+        """
+        built_at = self._baseline_built_at
+        due = (
+            built_at is None
+            or start < built_at
+            or start - built_at >= self._config.baseline_refresh
         )
-        history_traces = build_traces(history)
-        self._baseline = Baseline.from_traces(history_traces)
-        self._baseline_start = start
-        if self._metrics is not None:
-            self._metrics.set(
-                "rolda_worker_baseline_build_seconds",
-                round(time.monotonic() - began, 3),
-            )
-            self._metrics.set(
-                "rolda_worker_baseline_traces", len(history_traces)
-            )
+        if due and self._refresh_task is None:
+            self._refresh_task = asyncio.create_task(self._refresh(start))
         return self._baseline
+
+    async def _refresh(self, start: datetime) -> None:
+        began = time.monotonic()
+        try:
+            self._baseline = await self._history.refresh(start)
+            self._baseline_built_at = start
+        except Exception:
+            logger.exception("baseline refresh failed; keeping the old one")
+        else:
+            if self._metrics is not None:
+                self._metrics.set(
+                    "rolda_worker_baseline_build_seconds",
+                    round(time.monotonic() - began, 3),
+                )
+                self._metrics.set(
+                    "rolda_worker_baseline_traces", self._history.trace_count
+                )
+        finally:
+            self._refresh_task = None
+
+    async def wait_for_baseline(self) -> None:
+        """Wait for a refresh in progress. For tests and shutdown."""
+        task = self._refresh_task
+        if task is not None:
+            await task
 
     def _incidents_for(
         self, trace: Trace, baseline: Baseline
