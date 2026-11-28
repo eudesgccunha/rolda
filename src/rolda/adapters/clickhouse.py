@@ -9,7 +9,7 @@ from typing import Any
 import clickhouse_connect
 
 from rolda.entrypoints.settings import Settings
-from rolda.traces import NormalizationError, Span, normalize_span
+from rolda.traces import NormalizationError, Shard, Span, normalize_span
 
 logger = logging.getLogger(__name__)
 
@@ -20,6 +20,8 @@ SELECT Timestamp, TraceId, SpanId, ParentSpanId, SpanName, SpanKind,
 FROM otel_traces
 WHERE Timestamp >= {start:DateTime64(9)}
   AND Timestamp < {end:DateTime64(9)}
+  AND ({shards:UInt32} = 1
+       OR CRC32(TraceId) % {shards:UInt32} = {shard:UInt32})
 ORDER BY Timestamp
 """
 
@@ -66,8 +68,9 @@ def _naive_utc(value: datetime) -> datetime:
 class ClickHouseSpanSource:
     """Read spans written by the Collector ``clickhouse`` exporter."""
 
-    def __init__(self, settings: Settings) -> None:
+    def __init__(self, settings: Settings, shard: Shard | None = None) -> None:
         self._settings = settings
+        self._shard = shard or Shard.single()
         self.skipped_rows = 0
 
     def _run(self, sql: str, parameters: dict[str, Any]) -> Sequence[Span]:
@@ -92,7 +95,12 @@ class ClickHouseSpanSource:
         self, start: datetime, end: datetime
     ) -> Sequence[Span]:
         """Return spans that started in ``[start, end)``."""
-        parameters = {"start": _naive_utc(start), "end": _naive_utc(end)}
+        parameters: dict[str, Any] = {
+            "start": _naive_utc(start),
+            "end": _naive_utc(end),
+            "shards": self._shard.count,
+            "shard": self._shard.index,
+        }
         return await asyncio.to_thread(self._run, _QUERY, parameters)
 
     async def spans_for_trace(self, trace_id: str) -> Sequence[Span]:

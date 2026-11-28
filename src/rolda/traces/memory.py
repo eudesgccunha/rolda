@@ -4,13 +4,17 @@ from collections.abc import Iterable, Sequence
 from datetime import datetime
 
 from rolda.traces.model import Span
+from rolda.traces.shard import Shard
 
 
 class InMemorySpanSource:
     """Serve spans from a list, filtered by start time."""
 
-    def __init__(self, spans: Iterable[Span] = ()) -> None:
+    def __init__(
+        self, spans: Iterable[Span] = (), shard: Shard | None = None
+    ) -> None:
         self._spans = list(spans)
+        self._shard = shard or Shard.single()
 
     def add(self, span: Span) -> None:
         """Add a span, as if it arrived late."""
@@ -20,7 +24,11 @@ class InMemorySpanSource:
         self, start: datetime, end: datetime
     ) -> Sequence[Span]:
         """Return spans that started in ``[start, end)``."""
-        return [s for s in self._spans if start <= s.started_at < end]
+        return [
+            s
+            for s in self._spans
+            if start <= s.started_at < end and self._shard.owns(s.trace_id)
+        ]
 
     async def spans_for_trace(self, trace_id: str) -> Sequence[Span]:
         """Return every span of one trace."""

@@ -34,6 +34,7 @@ from rolda.entrypoints.worker import (
 )
 from rolda.observability import Metrics
 from rolda.observability.status_server import StatusServer
+from rolda.traces import Shard
 
 
 def main() -> None:
@@ -64,7 +65,9 @@ def main() -> None:
     metrics = Metrics()
     register_worker_metrics(metrics)
     worker = Worker(
-        source=ClickHouseSpanSource(settings),
+        source=ClickHouseSpanSource(
+            settings, Shard(settings.shard_count, settings.shard_index)
+        ),
         store=incidents,
         outbox=incidents,
         rules=default_rules(settings.detection),
@@ -73,6 +76,13 @@ def main() -> None:
         metrics=metrics,
     )
     asyncio.run(_serve(worker, settings, metrics, pool))
+
+
+def _worker_name(settings: Settings) -> str:
+    """Name the checkpoint and the lock. One shard keeps the old name."""
+    if settings.shard_count == 1:
+        return "worker"
+    return f"worker-{settings.shard_index}"
 
 
 async def _serve(
@@ -114,6 +124,7 @@ async def _serve(
             sleep=sleep,
             checkpoints=PostgresCheckpointStore(settings.postgres_dsn, pool),
             leadership=PostgresLeadership(settings.postgres_dsn),
+            name=_worker_name(settings),
             stop=stop,
             metrics=metrics,
         )

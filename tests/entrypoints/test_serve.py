@@ -267,3 +267,56 @@ def test_the_database_pool_has_a_default_size_and_can_change() -> None:
 def test_the_pool_size_must_be_positive(value: str) -> None:
     with pytest.raises(SettingsError, match="ROLDA_POSTGRES_POOL_SIZE"):
         load_settings({**ENV, "ROLDA_POSTGRES_POOL_SIZE": value})
+
+
+def test_by_default_one_worker_owns_everything() -> None:
+    settings = load_settings(ENV)
+
+    assert (settings.shard_count, settings.shard_index) == (1, 0)
+
+
+def test_the_shard_can_be_set() -> None:
+    settings = load_settings(
+        {**ENV, "ROLDA_SHARD_COUNT": "4", "ROLDA_SHARD_INDEX": "2"}
+    )
+
+    assert (settings.shard_count, settings.shard_index) == (4, 2)
+
+
+def test_the_shard_index_can_come_from_the_pod_ordinal() -> None:
+    settings = load_settings(
+        {
+            **ENV,
+            "ROLDA_SHARD_COUNT": "3",
+            "ROLDA_SHARD_INDEX": "auto",
+            "HOSTNAME": "rolda-worker-2",
+        }
+    )
+
+    assert settings.shard_index == 2
+
+
+@pytest.mark.parametrize(
+    "extra",
+    [
+        {"ROLDA_SHARD_COUNT": "0"},
+        {"ROLDA_SHARD_COUNT": "3", "ROLDA_SHARD_INDEX": "3"},
+        {"ROLDA_SHARD_COUNT": "3", "ROLDA_SHARD_INDEX": "-1"},
+        {"ROLDA_SHARD_COUNT": "3", "ROLDA_SHARD_INDEX": "auto"},
+        {
+            "ROLDA_SHARD_COUNT": "3",
+            "ROLDA_SHARD_INDEX": "auto",
+            "HOSTNAME": "no-number",
+        },
+        {
+            "ROLDA_SHARD_COUNT": "2",
+            "ROLDA_SHARD_INDEX": "auto",
+            "HOSTNAME": "rolda-worker-5",
+        },
+    ],
+)
+def test_an_invalid_shard_stops_the_worker_at_start(
+    extra: dict[str, str],
+) -> None:
+    with pytest.raises(SettingsError, match="ROLDA_SHARD"):
+        load_settings({**ENV, **extra})
