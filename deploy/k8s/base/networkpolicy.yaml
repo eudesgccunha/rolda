@@ -1,0 +1,53 @@
+# Deny all ingress by default, then allow only what is needed. Egress is not
+# restricted here: it depends on where your databases and alert webhooks are.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-ingress
+spec:
+  podSelector: {}
+  policyTypes: [Ingress]
+---
+# Agents send OTLP to the collector. Narrow `from` to your agents' namespaces.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-otlp-to-collector
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: rolda-collector
+  policyTypes: [Ingress]
+  ingress:
+    - ports:
+        - {port: 4317, protocol: TCP}
+        - {port: 4318, protocol: TCP}
+---
+# The API is reached by an ingress controller or other pods you choose. Narrow
+# `from` to them.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-api
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: rolda-api
+  policyTypes: [Ingress]
+  ingress:
+    - ports:
+        - {port: 8000, protocol: TCP}
+---
+# Prometheus scrapes the worker status port. Narrow `from` to its namespace.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-worker-metrics
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: rolda-worker
+  policyTypes: [Ingress]
+  ingress:
+    - ports:
+        - {port: 9100, protocol: TCP}

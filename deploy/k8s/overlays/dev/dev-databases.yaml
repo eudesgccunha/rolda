@@ -1,0 +1,122 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: clickhouse
+spec:
+  serviceName: clickhouse
+  replicas: 1
+  selector:
+    matchLabels: {app.kubernetes.io/name: clickhouse}
+  template:
+    metadata:
+      labels: {app.kubernetes.io/name: clickhouse}
+    spec:
+      containers:
+        - name: clickhouse
+          image: clickhouse/clickhouse-server:25.8@sha256:0152dd511befe6a2c2ef53e930726179669b08116da78500b37c51c96ff5ee77
+          ports:
+            - {name: http, containerPort: 8123}
+            - {name: native, containerPort: 9000}
+          env:
+            - name: CLICKHOUSE_USER
+              valueFrom: {secretKeyRef: {name: rolda-secrets, key: CLICKHOUSE_USER}}
+            - name: CLICKHOUSE_PASSWORD
+              valueFrom: {secretKeyRef: {name: rolda-secrets, key: CLICKHOUSE_PASSWORD}}
+            - {name: CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT, value: "0"}
+          readinessProbe:
+            httpGet: {path: /ping, port: http}
+            periodSeconds: 5
+          volumeMounts:
+            - {name: data, mountPath: /var/lib/clickhouse}
+  volumeClaimTemplates:
+    - metadata: {name: data}
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources: {requests: {storage: 2Gi}}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: clickhouse
+spec:
+  selector: {app.kubernetes.io/name: clickhouse}
+  ports:
+    - {name: http, port: 8123, targetPort: http}
+    - {name: native, port: 9000, targetPort: native}
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+spec:
+  serviceName: postgres
+  replicas: 1
+  selector:
+    matchLabels: {app.kubernetes.io/name: postgres}
+  template:
+    metadata:
+      labels: {app.kubernetes.io/name: postgres}
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:17@sha256:87c8b42f423b45d5247e6aa8fdb2e7762fec164c68a50fe3eb07e7bfcaf4dbcf
+          ports:
+            - {name: pg, containerPort: 5432}
+          env:
+            - name: POSTGRES_USER
+              valueFrom: {secretKeyRef: {name: rolda-secrets, key: POSTGRES_USER}}
+            - name: POSTGRES_PASSWORD
+              valueFrom: {secretKeyRef: {name: rolda-secrets, key: POSTGRES_PASSWORD}}
+            - {name: POSTGRES_DB, value: rolda}
+            - {name: PGDATA, value: /var/lib/postgresql/data/pgdata}
+          readinessProbe:
+            exec:
+              command: ["sh", "-c", "pg_isready -U $POSTGRES_USER -d rolda"]
+            periodSeconds: 5
+          volumeMounts:
+            - {name: data, mountPath: /var/lib/postgresql/data}
+  volumeClaimTemplates:
+    - metadata: {name: data}
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources: {requests: {storage: 2Gi}}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+spec:
+  selector: {app.kubernetes.io/name: postgres}
+  ports:
+    - {name: pg, port: 5432, targetPort: pg}
+---
+# The base denies all ingress. Let the Rolda pods reach the dev databases.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-databases-from-rolda
+spec:
+  podSelector:
+    matchExpressions:
+      - key: app.kubernetes.io/name
+        operator: In
+        values: [clickhouse, postgres]
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector: {}
+---
+# Dev only: reach the collector from the host through the kind port mapping.
+apiVersion: v1
+kind: Service
+metadata:
+  name: rolda-collector-nodeport
+spec:
+  type: NodePort
+  selector:
+    app.kubernetes.io/name: rolda-collector
+  ports:
+    - name: otlp-http
+      port: 4318
+      targetPort: otlp-http
+      nodePort: 30318

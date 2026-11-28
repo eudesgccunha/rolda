@@ -1,0 +1,134 @@
+# One StatefulSet pod per shard. The pod ordinal is the shard index, so
+# `rolda-worker-2` handles shard 2 and keeps its own checkpoint. To add
+# throughput, raise `replicas` AND ROLDA_SHARD_COUNT in rolda-config together.
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: rolda-worker
+  labels:
+    app.kubernetes.io/name: rolda-worker
+spec:
+  serviceName: rolda-worker
+  replicas: 1
+  podManagementPolicy: Parallel
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: rolda-worker
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: rolda-worker
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      terminationGracePeriodSeconds: 45
+      initContainers:
+        - name: migrate
+          image: rolda
+          command: ["python", "-m", "rolda.entrypoints.migrate"]
+          envFrom:
+            - configMapRef:
+                name: rolda-config
+          env:
+            - name: CLICKHOUSE_USER
+              valueFrom:
+                secretKeyRef:
+                  name: rolda-secrets
+                  key: CLICKHOUSE_USER
+            - name: CLICKHOUSE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: rolda-secrets
+                  key: CLICKHOUSE_PASSWORD
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: rolda-secrets
+                  key: POSTGRES_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: rolda-secrets
+                  key: POSTGRES_PASSWORD
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          resources:
+            requests: {cpu: 50m, memory: 64Mi}
+            limits: {cpu: 500m, memory: 256Mi}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      containers:
+        - name: worker
+          image: rolda
+          command: ["python", "-m", "rolda.entrypoints"]
+          ports:
+            - name: status
+              containerPort: 9100
+          envFrom:
+            - configMapRef:
+                name: rolda-config
+          env:
+            - name: ROLDA_SHARD_INDEX
+              value: auto
+            - name: CLICKHOUSE_USER
+              valueFrom:
+                secretKeyRef:
+                  name: rolda-secrets
+                  key: CLICKHOUSE_USER
+            - name: CLICKHOUSE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: rolda-secrets
+                  key: CLICKHOUSE_PASSWORD
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: rolda-secrets
+                  key: POSTGRES_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: rolda-secrets
+                  key: POSTGRES_PASSWORD
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          resources:
+            requests: {cpu: 100m, memory: 128Mi}
+            limits: {cpu: "1", memory: 512Mi}
+          livenessProbe:
+            httpGet: {path: /healthz, port: status}
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: rolda-worker
+spec:
+  clusterIP: None
+  selector:
+    app.kubernetes.io/name: rolda-worker
+  ports:
+    - name: status
+      port: 9100
+      targetPort: status
