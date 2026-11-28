@@ -32,15 +32,19 @@ There is no published image yet. Build it from `deploy/docker/Dockerfile`.
 - Pods run as a non-root user with a read-only root filesystem, no
   capabilities and the `RuntimeDefault` seccomp profile. The namespace enforces
   the `restricted` Pod Security level.
+- The Collector refuses OTLP writes without `Authorization: Bearer
+  <ROLDA_OTLP_TOKEN>`, with the token taken from the Secret. Agents send it with
+  `OTEL_EXPORTER_OTLP_HEADERS="Authorization=Bearer%20<token>"`.
 - Ingress is denied by default. The policies allow OTLP to the Collector, port
   8000 to the API and port 9100 to the worker. Narrow their `from` to your
   agents, your ingress controller and Prometheus. Egress is not restricted.
 
 ## Not included
 
-- The databases (see above), TLS, an Ingress, and authentication of the OTLP
-  receiver. Put the Collector behind your mesh or gateway if agents are not
-  inside the cluster.
+- The databases (see above), TLS and an Ingress. The OTLP receiver requires a
+  bearer token (ADR 0021), but the token travels in clear text unless you add
+  TLS. Put the Collector behind your mesh or gateway if agents are not inside
+  the cluster.
 - A metrics scraper. The worker serves Prometheus text on `:9100/metrics`.
 
 ## Try it locally

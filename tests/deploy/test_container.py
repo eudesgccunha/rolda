@@ -123,3 +123,32 @@ def test_no_kubernetes_manifest_holds_a_secret_value() -> None:
             assert 'PASSWORD: ""' in text
             continue
         assert "kind: Secret" not in text, path.name
+
+
+AUTH_CONFIGS = [
+    K8S / "base" / "otelcol.yaml",
+    ROOT / "deploy" / "compose" / "collector.auth.yaml",
+]
+
+
+def test_the_authenticated_collector_configs_protect_both_protocols() -> None:
+    for path in AUTH_CONFIGS:
+        text = path.read_text(encoding="utf-8")
+
+        assert "bearertokenauth:" in text, path.name
+        assert text.count("authenticator: bearertokenauth") == 2, path.name
+        assert "token: ${env:ROLDA_OTLP_TOKEN}" in text, path.name
+        assert "extensions: [" in text
+        assert "bearertokenauth" in text.split("service:")[1], path.name
+
+
+def test_the_kubernetes_collector_gets_the_otlp_token_from_the_secret() -> (
+    None
+):
+    text = (K8S / "base" / "collector.yaml").read_text(encoding="utf-8")
+
+    assert "name: ROLDA_OTLP_TOKEN" in text
+    assert "key: ROLDA_OTLP_TOKEN" in text
+    assert 'ROLDA_OTLP_TOKEN: ""' in (
+        K8S / "base" / "secrets.example.yaml"
+    ).read_text(encoding="utf-8")

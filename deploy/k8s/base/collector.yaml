@@ -42,6 +42,11 @@ spec:
                 configMapKeyRef:
                   name: rolda-config
                   key: ROLDA_CLICKHOUSE_HOST
+            - name: ROLDA_OTLP_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: rolda-secrets
+                  key: ROLDA_OTLP_TOKEN
             - name: CLICKHOUSE_USER
               valueFrom:
                 secretKeyRef:

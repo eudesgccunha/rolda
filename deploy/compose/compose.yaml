@@ -24,11 +24,14 @@ services:
     environment:
       CLICKHOUSE_USER: ${CLICKHOUSE_USER:?set CLICKHOUSE_USER in .env}
       CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:?set CLICKHOUSE_PASSWORD in .env}
+      ROLDA_OTLP_TOKEN: ${ROLDA_OTLP_TOKEN:-}
     ports:
       - "127.0.0.1:4317:4317"
       - "127.0.0.1:4318:4318"
     volumes:
-      - ./collector.yaml:/etc/otelcol/config.yaml:ro
+      # Set COLLECTOR_CONFIG=collector.auth.yaml (and ROLDA_OTLP_TOKEN) to
+      # require a bearer token on OTLP writes.
+      - ./${COLLECTOR_CONFIG:-collector.yaml}:/etc/otelcol/config.yaml:ro
     depends_on:
       clickhouse:
         condition: service_healthy

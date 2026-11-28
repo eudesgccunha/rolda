@@ -26,8 +26,11 @@ if [ -z "${REUSE:-}" ]; then
     --from-literal=CLICKHOUSE_PASSWORD="$(openssl rand -hex 16)" \
     --from-literal=POSTGRES_USER=rolda \
     --from-literal=POSTGRES_PASSWORD="$(openssl rand -hex 16)" \
-    --from-literal=ROLDA_API_TOKEN="$(openssl rand -hex 24)"
+    --from-literal=ROLDA_API_TOKEN="$(openssl rand -hex 24)" \
+    --from-literal=ROLDA_OTLP_TOKEN="$(openssl rand -hex 24)"
 fi
+# The agent sends the collector token, read from the Secret, never from a file.
+OTLP_TOKEN=$($K get secret rolda-secrets -o jsonpath='{.data.ROLDA_OTLP_TOKEN}' | base64 -d)
 kubectl --context "kind-$NAME" apply -k "$ROOT/deploy/k8s/overlays/dev"
 
 $K rollout status statefulset/clickhouse --timeout=600s
@@ -37,8 +40,18 @@ $K rollout status statefulset/rolda-collector --timeout=600s
 $K rollout status deployment/rolda-api --timeout=600s
 echo "== cluster ready: $(date -u +%T)"; $K get pods
 
+# The collector must refuse writes without the token and accept them with it.
+probe() {
+  curl -s -o /dev/null -w '%{http_code}' -X POST http://127.0.0.1:14318/v1/traces \
+    -H 'Content-Type: application/json' "$@" -d '{"resourceSpans":[]}'
+}
+echo "OTLP without token:    $(probe)   (expect 401)"
+echo "OTLP with wrong token: $(probe -H 'Authorization: Bearer wrong')   (expect 401)"
+echo "OTLP with the token:   $(probe -H "Authorization: Bearer $OTLP_TOKEN")   (expect 200)"
+
 (
   cd "$ROOT"
+  OTEL_EXPORTER_OTLP_HEADERS="Authorization=Bearer%20$OTLP_TOKEN" \
   uv run --no-project --with opentelemetry-sdk \
     --with opentelemetry-exporter-otlp-proto-http \
     python examples/support_agent/run.py --seed 83 --sessions "$SESSIONS" \

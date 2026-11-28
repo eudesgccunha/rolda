@@ -1,0 +1,40 @@
+extensions:
+  # Every OTLP write must carry "Authorization: Bearer <ROLDA_OTLP_TOKEN>".
+  # The scheme is case sensitive: send "Bearer", not "bearer".
+  bearertokenauth:
+    scheme: Bearer
+    token: ${env:ROLDA_OTLP_TOKEN}
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+        auth:
+          authenticator: bearertokenauth
+      http:
+        endpoint: 0.0.0.0:4318
+        auth:
+          authenticator: bearertokenauth
+
+processors:
+  batch:
+    timeout: 1s
+
+exporters:
+  clickhouse:
+    endpoint: tcp://clickhouse:9000
+    database: rolda
+    username: ${env:CLICKHOUSE_USER}
+    password: ${env:CLICKHOUSE_PASSWORD}
+    # Schema is versioned in src/rolda/migrations/clickhouse, not created by the exporter.
+    create_schema: false
+    traces_table_name: otel_traces
+
+service:
+  extensions: [bearertokenauth]
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [clickhouse]

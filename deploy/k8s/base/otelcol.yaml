@@ -2,6 +2,11 @@
 # in front of ClickHouse is kept on disk (file_storage), so spans accepted
 # before a pod dies or ClickHouse is down are sent later, not lost.
 extensions:
+  # Every OTLP write must carry "Authorization: Bearer <ROLDA_OTLP_TOKEN>".
+  # The scheme is case sensitive: send "Bearer", not "bearer".
+  bearertokenauth:
+    scheme: Bearer
+    token: ${env:ROLDA_OTLP_TOKEN}
   file_storage:
     directory: /var/lib/otelcol/queue
     create_directory: true
@@ -12,8 +17,12 @@ receivers:
     protocols:
       grpc:
         endpoint: 0.0.0.0:4317
+        auth:
+          authenticator: bearertokenauth
       http:
         endpoint: 0.0.0.0:4318
+        auth:
+          authenticator: bearertokenauth
 
 processors:
   memory_limiter:
@@ -45,7 +54,7 @@ exporters:
       max_elapsed_time: 0s
 
 service:
-  extensions: [file_storage]
+  extensions: [bearertokenauth, file_storage]
   pipelines:
     traces:
       receivers: [otlp]

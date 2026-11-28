@@ -94,7 +94,9 @@ def _trace(rng: random.Random, now_ns: int) -> list[dict[str, object]]:
 
 
 def _post(
-    endpoint: tuple[str, int, str], spans: list[dict[str, object]]
+    endpoint: tuple[str, int, str],
+    spans: list[dict[str, object]],
+    token: str | None,
 ) -> bool:
     host, port, path = endpoint
     body = json.dumps(
@@ -116,6 +118,9 @@ def _post(
             ]
         }
     )
+    headers = {"Content-Type": "application/json"}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
     conn = http.client.HTTPConnection(host, port, timeout=15)
     try:
         conn.request(
@@ -140,6 +145,11 @@ def main() -> None:
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=4318)
     parser.add_argument("--seed", type=int, default=1)
+    parser.add_argument(
+        "--token",
+        default=None,
+        help="OTLP bearer token, if the collector asks",
+    )
     args = parser.parse_args()
 
     rng = random.Random(args.seed)  # noqa: S311 - simulation, not crypto
@@ -156,7 +166,7 @@ def main() -> None:
         now_ns = time.time_ns()
         spans = [span for _ in range(count) for span in _trace(rng, now_ns)]
         if spans:
-            if _post(endpoint, spans):
+            if _post(endpoint, spans, args.token):
                 sent += len(spans)
             else:
                 failed += len(spans)

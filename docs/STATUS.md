@@ -97,8 +97,10 @@ proven, what is not, and what is needed to close the gap.
 
 - One shared bearer token for the API. No users, roles or rate limiting.
   Put TLS in front before exposing it.
-- The OTLP receiver has no authentication. The Compose file binds it to
-  `127.0.0.1`.
+- The OTLP receiver can require one shared bearer token (ADR 0021): on by
+  default in Kubernetes, opt in with Compose, which otherwise binds it to
+  `127.0.0.1`. The token is not per agent, and without TLS it is sent in clear
+  text.
 - The in-memory adapters exist next to the real ones, for tests.
 - No call ceiling for the judge, and no check that the judge model differs
   from the agent's model.
@@ -127,7 +129,7 @@ Still limits:
   See the extrapolation above; there is no test beyond 100 spans per second.
 - The databases are single nodes, and the Collector queue is in memory, so a
   killed Collector pod loses its batch.
-- The OTLP receiver has no authentication, and there is no Helm chart.
+- There is no TLS on the OTLP receiver and no Helm chart.
 
 Fine for a small deployment (a few spans per second). Not ready for high
 volume. The plan for the rest of M8 is in the project history: baseline in
@@ -186,7 +188,7 @@ The plan is in [SPEC.md](SPEC.md).
 | M7 HTTP API (added) | Done |
 | M8a Worker resilience (added) | Done, verified on Docker Compose |
 | M8b Scale (baseline slices, pool, agent index, load test) | Done; measured up to 100 spans/s for 2 minutes |
-| M8c Kubernetes (sharding, manifests, kill test) | Done on a local kind cluster; OTLP authentication not done |
+| M8c Kubernetes (sharding, manifests, kill test, OTLP token) | Done on a local kind cluster |
 
 ## M8b measurements (2026-11-27)
 
