@@ -27,8 +27,8 @@ $K create secret generic rolda-secrets \
   --from-literal=ROLDA_API_TOKEN="$(openssl rand -hex 24)"
 kubectl --context "kind-$NAME" apply -k "$ROOT/deploy/k8s/overlays/dev"
 
-$K rollout status statefulset/clickhouse statefulset/postgres --timeout=600s 2>/dev/null || \
-  { $K rollout status statefulset/clickhouse --timeout=600s; $K rollout status statefulset/postgres --timeout=600s; }
+$K rollout status statefulset/clickhouse --timeout=600s
+$K rollout status statefulset/postgres --timeout=600s
 $K rollout status statefulset/rolda-worker --timeout=600s
 $K rollout status statefulset/rolda-collector --timeout=600s
 $K rollout status deployment/rolda-api --timeout=600s
