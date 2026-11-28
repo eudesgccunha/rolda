@@ -29,7 +29,12 @@ A real Collector (`tests/integration/test_collector_auth.py`): no token, a wrong
 token and a wrong scheme are all refused with 401, and the right token gets
 200. The Python SDK of the simulated agent works with the header. Both shipped
 configs pass the Collector's own `validate`. The Kubernetes test (ADR 0020)
-runs with the token on.
+ran again with the token on: the Collector answered 401 without a token and
+with a wrong one, and 200 with the right one. A batch of 150 simulated
+sessions sent with the token was exported with no failed batch. With the
+worker, a Collector pod and PostgreSQL deleted during the run, all 15
+timeouts, 2 rate limits and 6 loops were found, no healthy session was
+flagged and no incident was duplicated.
 
 ## Consequences
 
