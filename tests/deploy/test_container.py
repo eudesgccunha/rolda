@@ -98,3 +98,28 @@ def test_the_api_token_comes_from_the_environment_and_is_optional() -> None:
     text = COMPOSE.read_text(encoding="utf-8")
 
     assert "ROLDA_API_TOKEN: ${ROLDA_API_TOKEN:-}" in text
+
+
+K8S = ROOT / "deploy" / "k8s"
+
+
+def test_every_kubernetes_pod_turns_off_service_links() -> None:
+    # Kubernetes injects NAME_PORT=tcp://... for every Service. A Service named
+    # rolda-api collides with ROLDA_API_PORT and the API refuses to start.
+    for path in K8S.rglob("*.yaml"):
+        text = path.read_text(encoding="utf-8")
+        for kind in ("Deployment", "StatefulSet"):
+            documents = [
+                d for d in text.split("\n---") if f"kind: {kind}" in d
+            ]
+            for document in documents:
+                assert "enableServiceLinks: false" in document, path.name
+
+
+def test_no_kubernetes_manifest_holds_a_secret_value() -> None:
+    for path in K8S.rglob("*.yaml"):
+        text = path.read_text(encoding="utf-8")
+        if path.name == "secrets.example.yaml":
+            assert 'PASSWORD: ""' in text
+            continue
+        assert "kind: Secret" not in text, path.name

@@ -11,6 +11,7 @@ spec:
     metadata:
       labels: {app.kubernetes.io/name: clickhouse}
     spec:
+      enableServiceLinks: false
       containers:
         - name: clickhouse
           image: clickhouse/clickhouse-server:25.8@sha256:0152dd511befe6a2c2ef53e930726179669b08116da78500b37c51c96ff5ee77
@@ -57,6 +58,7 @@ spec:
     metadata:
       labels: {app.kubernetes.io/name: postgres}
     spec:
+      enableServiceLinks: false
       containers:
         - name: postgres
           image: postgres:17@sha256:87c8b42f423b45d5247e6aa8fdb2e7762fec164c68a50fe3eb07e7bfcaf4dbcf

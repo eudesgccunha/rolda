@@ -19,6 +19,7 @@ spec:
         app.kubernetes.io/name: rolda-collector
     spec:
       automountServiceAccountToken: false
+      enableServiceLinks: false
       securityContext:
         runAsNonRoot: true
         runAsUser: 10001
