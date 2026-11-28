@@ -104,3 +104,34 @@ def test_other_schemes_are_rejected(serve_app: ServeApp) -> None:
     )
 
     assert reply.status == 401
+
+
+class _Resource:
+    """Something the app opens at startup and closes at shutdown."""
+
+    def __init__(self) -> None:
+        self.events: list[str] = []
+
+    async def open(self) -> None:
+        self.events.append("open")
+
+    async def close(self) -> None:
+        self.events.append("close")
+
+
+def test_resources_are_opened_at_startup_and_closed_at_shutdown(
+    serve_app: ServeApp,
+) -> None:
+    resource = _Resource()
+    incidents = InMemoryIncidentStore()
+    app = create_app(
+        incidents=incidents,
+        labels=InMemoryLabelStore(incidents),
+        spans=InMemorySpanSource(),
+        token=TOKEN,
+        resources=[resource],
+    )
+
+    client = serve_app(app, TOKEN)
+    assert client.call("GET", "/health", send_token=False).status == 200
+    assert resource.events == ["open"]

@@ -13,6 +13,16 @@
 | [0009](0009-redundant-outliers-and-span-latency.md) | Redundant outliers, per-span rules and calibration |
 | [0010](0010-http-api.md) | HTTP API |
 | [0011](0011-container-image.md) | Container image and Compose services |
+| [0012](0012-schema-migrations.md) | Versioned schema migrations |
+| [0013](0013-worker-checkpoint-and-leadership.md) | Worker checkpoint and leader lock |
+| [0014](0014-alert-outbox.md) | Alert outbox |
+| [0015](0015-zero-mad-fallback.md) | Outlier score when the MAD is zero |
+| [0016](0016-probes-and-metrics.md) | Probes and metrics |
+| [0017](0017-baseline-from-slices.md) | Baseline built from slices, in the background |
+| [0018](0018-connection-pool-and-agent-column.md) | Connection pool and an indexed agent column |
+| [0019](0019-sharding.md) | Sharding the worker by trace id |
+| [0020](0020-kubernetes-deployment.md) | Kubernetes deployment |
+| [0021](0021-otlp-bearer-token.md) | Bearer token on the OTLP receiver |
 
 Add a new record as `NNNN-title.md` when a decision changes the architecture,
 a dependency or a security property.

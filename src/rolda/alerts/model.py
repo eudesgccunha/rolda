@@ -21,6 +21,8 @@ class Alert:
 class Alerter(Protocol):
     """Port implemented by every alert channel."""
 
+    name: str
+
     async def send(self, alert: Alert) -> None:
         """Deliver an alert. Raise ``AlertDeliveryError`` on failure."""
         ...

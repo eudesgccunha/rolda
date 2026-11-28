@@ -10,11 +10,13 @@ from rolda.traces.model import (
 )
 from rolda.traces.normalize import NormalizationError, normalize_span
 from rolda.traces.ports import SpanSource
+from rolda.traces.shard import Shard
 
 __all__ = [
     "InMemorySpanSource",
     "NormalizationError",
     "Operation",
+    "Shard",
     "Span",
     "SpanSource",
     "SpanStatus",

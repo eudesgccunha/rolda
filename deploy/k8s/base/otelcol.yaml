@@ -1,0 +1,62 @@
+# OpenTelemetry Collector for Kubernetes. Unlike the Compose file, the queue
+# in front of ClickHouse is kept on disk (file_storage), so spans accepted
+# before a pod dies or ClickHouse is down are sent later, not lost.
+extensions:
+  # Every OTLP write must carry "Authorization: Bearer <ROLDA_OTLP_TOKEN>".
+  # The scheme is case sensitive: send "Bearer", not "bearer".
+  bearertokenauth:
+    scheme: Bearer
+    token: ${env:ROLDA_OTLP_TOKEN}
+  file_storage:
+    directory: /var/lib/otelcol/queue
+    create_directory: true
+    timeout: 10s
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+        auth:
+          authenticator: bearertokenauth
+      http:
+        endpoint: 0.0.0.0:4318
+        auth:
+          authenticator: bearertokenauth
+
+processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 400
+    spike_limit_mib: 100
+  batch:
+    timeout: 1s
+    send_batch_size: 8192
+
+exporters:
+  clickhouse:
+    endpoint: tcp://${env:CLICKHOUSE_HOST}:9000
+    database: rolda
+    username: ${env:CLICKHOUSE_USER}
+    password: ${env:CLICKHOUSE_PASSWORD}
+    # The schema comes from the migrations, not from the exporter.
+    create_schema: false
+    traces_table_name: otel_traces
+    sending_queue:
+      enabled: true
+      storage: file_storage
+      queue_size: 5000
+      num_consumers: 4
+    retry_on_failure:
+      enabled: true
+      initial_interval: 5s
+      max_interval: 30s
+      max_elapsed_time: 0s
+
+service:
+  extensions: [bearertokenauth, file_storage]
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [clickhouse]

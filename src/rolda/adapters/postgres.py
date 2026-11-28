@@ -1,7 +1,10 @@
 """PostgreSQL adapter for the ``IncidentStore`` port."""
 
-from collections.abc import Sequence
-from typing import Any
+import contextlib
+from collections.abc import AsyncIterator, Sequence
+from contextlib import AbstractAsyncContextManager, asynccontextmanager
+from datetime import datetime, timedelta
+from typing import Any, Protocol
 
 import psycopg
 
@@ -11,15 +14,48 @@ from rolda.incidents import (
     Label,
     LabelSource,
     OrderKey,
+    PendingDelivery,
     UnknownIncidentError,
+    agent_of,
 )
 from rolda.judge import Verdict
+
+
+class ConnectionSource(Protocol):
+    """Anything that lends a connection, such as a psycopg pool."""
+
+    def connection(self) -> AbstractAsyncContextManager[Any]:
+        """Lend a connection, committing or rolling back on exit."""
+        ...
+
+
+class PostgresConnections:
+    """Lend a connection from a pool, or open one when there is no pool.
+
+    A pool avoids a new connection per call. Without it, behavior is the
+    same as before, which is what the CLI and the tests use.
+    """
+
+    def __init__(self, dsn: str, pool: ConnectionSource | None = None) -> None:
+        self._dsn = dsn
+        self._pool = pool
+
+    @asynccontextmanager
+    async def connection(self) -> AsyncIterator[psycopg.AsyncConnection]:
+        """Lend a connection for one unit of work."""
+        if self._pool is not None:
+            async with self._pool.connection() as conn:
+                yield conn
+            return
+        async with await psycopg.AsyncConnection.connect(self._dsn) as conn:
+            yield conn
+
 
 _INSERT = """
 INSERT INTO incidents
     (trace_id, rule, span_id, evidence, confidence, signature, path,
-     detected_at)
-VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+     detected_at, agent)
+VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
 ON CONFLICT (trace_id, rule) DO NOTHING
 """
 
@@ -29,14 +65,40 @@ SELECT trace_id, rule, span_id, evidence, confidence, signature, path,
        detected_at
 FROM incidents
 WHERE (%(rule)s::text IS NULL OR rule = %(rule)s::text)
-  AND (%(agent)s::text IS NULL
-       OR split_part(signature, '|', 1) = %(agent)s::text)
+  AND (%(agent)s::text IS NULL OR agent = %(agent)s::text)
   AND (%(after_time)s::timestamptz IS NULL
        OR (detected_at, trace_id, rule)
           < (%(after_time)s::timestamptz, %(after_trace)s::text,
              %(after_rule)s::text))
 ORDER BY detected_at DESC, trace_id DESC, rule DESC
 LIMIT %(limit)s
+"""
+
+_QUEUE_DELIVERY = """
+INSERT INTO alert_deliveries (trace_id, rule, channel) VALUES (%s, %s, %s)
+ON CONFLICT DO NOTHING
+"""
+
+_PENDING = """
+SELECT i.trace_id, i.rule, i.span_id, i.evidence, i.confidence,
+       i.signature, i.path, i.detected_at, d.channel, d.attempts
+FROM alert_deliveries d
+JOIN incidents i ON i.trace_id = d.trace_id AND i.rule = d.rule
+WHERE d.delivered_at IS NULL
+  AND d.attempts < %(max_attempts)s
+  AND (d.last_attempt_at IS NULL
+       OR d.last_attempt_at
+          < now() - d.attempts * %(backoff)s * interval '1 second')
+ORDER BY d.last_attempt_at NULLS FIRST, i.detected_at
+LIMIT %(limit)s
+"""
+
+_MARK_DELIVERY = """
+UPDATE alert_deliveries
+SET attempts = attempts + 1,
+    last_attempt_at = now(),
+    delivered_at = CASE WHEN %s THEN now() END
+WHERE trace_id = %s AND rule = %s AND channel = %s
 """
 
 _FOR_TRACE = """
@@ -64,12 +126,18 @@ def _incident(row: Sequence[Any]) -> Incident:
 class PostgresIncidentStore:
     """Store incidents in PostgreSQL, one row per trace and rule."""
 
-    def __init__(self, dsn: str) -> None:
+    def __init__(self, dsn: str, pool: ConnectionSource | None = None) -> None:
         self._dsn = dsn
+        self._db = PostgresConnections(dsn, pool)
 
-    async def save(self, incident: Incident) -> bool:
-        """Insert the incident. Return True when the row is new."""
-        async with await psycopg.AsyncConnection.connect(self._dsn) as conn:
+    async def save(
+        self, incident: Incident, channels: Sequence[str] = ()
+    ) -> bool:
+        """Insert the incident and queue its alerts in one transaction.
+
+        Return True when the incident row is new.
+        """
+        async with self._db.connection() as conn, conn.transaction():
             cursor = await conn.execute(
                 _INSERT,
                 (
@@ -81,9 +149,44 @@ class PostgresIncidentStore:
                     incident.signature,
                     list(incident.path),
                     incident.detected_at,
+                    agent_of(incident),
                 ),
             )
-            return cursor.rowcount == 1
+            created = cursor.rowcount == 1
+            if created and channels:
+                cursor = conn.cursor()
+                await cursor.executemany(
+                    _QUEUE_DELIVERY,
+                    [(incident.trace_id, incident.rule, c) for c in channels],
+                )
+            return created
+
+    async def pending(
+        self, *, limit: int, max_attempts: int, backoff: timedelta
+    ) -> Sequence[PendingDelivery]:
+        """Return deliveries that are due for another attempt."""
+        async with self._db.connection() as conn:
+            cursor = await conn.execute(
+                _PENDING,
+                {
+                    "max_attempts": max_attempts,
+                    "backoff": backoff.total_seconds(),
+                    "limit": limit,
+                },
+            )
+            rows = await cursor.fetchall()
+        return [
+            PendingDelivery(_incident(row[:8]), row[8], row[9]) for row in rows
+        ]
+
+    async def mark_delivery(
+        self, trace_id: str, rule: str, channel: str, *, delivered: bool
+    ) -> None:
+        """Record the result of one attempt."""
+        async with self._db.connection() as conn:
+            await conn.execute(
+                _MARK_DELIVERY, (delivered, trace_id, rule, channel)
+            )
 
     async def list(
         self,
@@ -102,14 +205,14 @@ class PostgresIncidentStore:
             "after_trace": after[1] if after else None,
             "after_rule": after[2] if after else None,
         }
-        async with await psycopg.AsyncConnection.connect(self._dsn) as conn:
+        async with self._db.connection() as conn:
             cursor = await conn.execute(_LIST, params)
             rows = await cursor.fetchall()
         return [_incident(row) for row in rows]
 
     async def for_trace(self, trace_id: str) -> Sequence[Incident]:
         """Return every incident of one trace."""
-        async with await psycopg.AsyncConnection.connect(self._dsn) as conn:
+        async with self._db.connection() as conn:
             cursor = await conn.execute(_FOR_TRACE, (trace_id,))
             rows = await cursor.fetchall()
         return [_incident(row) for row in rows]
@@ -146,12 +249,13 @@ FROM labels WHERE trace_id = %s ORDER BY rule, source
 class PostgresLabelStore:
     """Store labels in PostgreSQL, one row per incident and source."""
 
-    def __init__(self, dsn: str) -> None:
+    def __init__(self, dsn: str, pool: ConnectionSource | None = None) -> None:
         self._dsn = dsn
+        self._db = PostgresConnections(dsn, pool)
 
     async def upsert(self, label: Label) -> None:
         """Insert or replace a label for an existing incident."""
-        async with await psycopg.AsyncConnection.connect(self._dsn) as conn:
+        async with self._db.connection() as conn:
             try:
                 await conn.execute(
                     _UPSERT_LABEL,
@@ -173,7 +277,7 @@ class PostgresLabelStore:
 
     async def for_trace(self, trace_id: str) -> Sequence[Label]:
         """Return the labels of every incident of one trace."""
-        async with await psycopg.AsyncConnection.connect(self._dsn) as conn:
+        async with self._db.connection() as conn:
             cursor = await conn.execute(_LABELS_FOR_TRACE, (trace_id,))
             rows = await cursor.fetchall()
         return [
@@ -193,7 +297,7 @@ class PostgresLabelStore:
         self, source: LabelSource
     ) -> Sequence[tuple[Incident, Label]]:
         """Return labeled incidents from one source."""
-        async with await psycopg.AsyncConnection.connect(self._dsn) as conn:
+        async with self._db.connection() as conn:
             cursor = await conn.execute(_LABELED, (source.value,))
             rows = await cursor.fetchall()
         return [
@@ -211,3 +315,87 @@ class PostgresLabelStore:
             )
             for row in rows
         ]
+
+
+_UPSERT_CURSOR = """
+INSERT INTO worker_state (name, cursor) VALUES (%s, %s)
+ON CONFLICT (name) DO UPDATE SET cursor = EXCLUDED.cursor, updated_at = now()
+"""
+
+
+class PostgresCheckpointStore:
+    """Keep the worker cursor in the ``worker_state`` table."""
+
+    def __init__(self, dsn: str, pool: ConnectionSource | None = None) -> None:
+        self._dsn = dsn
+        self._db = PostgresConnections(dsn, pool)
+
+    async def get(self, name: str) -> datetime | None:
+        """Return the saved cursor, or None if there is none."""
+        async with self._db.connection() as conn:
+            cursor = await conn.execute(
+                "SELECT cursor FROM worker_state WHERE name = %s", (name,)
+            )
+            row = await cursor.fetchone()
+        return row[0] if row else None
+
+    async def set(self, name: str, value: datetime) -> None:
+        """Save the cursor."""
+        async with self._db.connection() as conn:
+            await conn.execute(_UPSERT_CURSOR, (name, value))
+
+
+class PostgresLeadership:
+    """Lead through a session-level advisory lock on a held connection.
+
+    The lock vanishes with the connection, so a crashed or partitioned
+    worker never keeps it.
+    """
+
+    def __init__(self, dsn: str) -> None:
+        self._dsn = dsn
+        self._conn: psycopg.AsyncConnection | None = None
+
+    async def try_acquire(self, name: str) -> bool:
+        """Take the lock without waiting. Return True if this worker leads."""
+        if self._conn is not None:
+            return True
+        conn = await psycopg.AsyncConnection.connect(
+            self._dsn, autocommit=True
+        )
+        try:
+            cursor = await conn.execute(
+                "SELECT pg_try_advisory_lock(hashtextextended(%s, 0))",
+                (f"rolda:{name}",),
+            )
+            row = await cursor.fetchone()
+            got = bool(row and row[0])
+        except BaseException:
+            await conn.close()
+            raise
+        if not got:
+            await conn.close()
+            return False
+        self._conn = conn
+        return True
+
+    async def is_held(self) -> bool:
+        """Return True while the connection that holds the lock is alive."""
+        if self._conn is None:
+            return False
+        try:
+            await self._conn.execute("SELECT 1")
+        except psycopg.Error:
+            await self._drop()
+            return False
+        return True
+
+    async def release(self) -> None:
+        """Close the connection, which releases the lock."""
+        await self._drop()
+
+    async def _drop(self) -> None:
+        conn, self._conn = self._conn, None
+        if conn is not None:
+            with contextlib.suppress(psycopg.Error):
+                await conn.close()

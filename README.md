@@ -52,7 +52,8 @@ git clone https://github.com/eudesgccunha/rolda.git
 cd rolda/deploy/compose
 cp .env.example .env     # then set real passwords and a long API token
 docker compose --profile app up -d --build --wait
-curl http://127.0.0.1:8000/health
+curl http://127.0.0.1:8000/health   # liveness
+curl http://127.0.0.1:8000/ready    # checks both databases
 ```
 
 This starts ClickHouse, PostgreSQL, the Collector (OTLP on `127.0.0.1:4317`
@@ -60,7 +61,9 @@ and `4318`), the worker and the API. `docker compose up` without
 `--profile app` starts only the infrastructure. If port 8000 is taken, set
 `ROLDA_API_HOST_PORT`.
 
-Point your agent's OTLP exporter at `http://127.0.0.1:4318/v1/traces`. See
+Point your agent's OTLP exporter at `http://127.0.0.1:4318/v1/traces`. To require
+a bearer token, set `COLLECTOR_CONFIG=collector.auth.yaml` and
+`ROLDA_OTLP_TOKEN` in `.env` (ADR 0021). See
 [docs/instrumentation.md](docs/instrumentation.md) for the attributes Rolda
 reads. To try it without an agent, run the simulated one:
 
@@ -106,9 +109,14 @@ Everything comes from the environment. Secrets never go in the repository.
 | `ROLDA_API_TOKEN` | required for the API | Bearer token, at least 16 characters |
 | `ROLDA_API_HOST`, `ROLDA_API_PORT` | `127.0.0.1`, `8000` | API bind address |
 | `ROLDA_API_DOCS` | `false` | Serve the OpenAPI docs |
-| `ROLDA_WINDOW_SECONDS`, `ROLDA_INTERVAL_SECONDS` | `300`, `60` | Worker window and period |
+| `ROLDA_WINDOW_SECONDS`, `ROLDA_INTERVAL_SECONDS` | `300`, `60` | Worker first-run lookback and period |
+| `ROLDA_MAX_CATCHUP_SECONDS`, `ROLDA_CHUNK_SECONDS` | `86400`, `3600` | Longest outage the worker catches up on, and the size of each catch-up step |
 | `ROLDA_CLICKHOUSE_HOST/PORT`, `ROLDA_POSTGRES_HOST/PORT` | loopback | Database addresses |
+| `COLLECTOR_CONFIG`, `ROLDA_OTLP_TOKEN` | `collector.yaml`, none | Compose: `collector.auth.yaml` plus a token requires a bearer token on OTLP |
 | `ROLDA_JUDGE_MODEL` | `claude-haiku-5-5` | Model for `judge-eval` |
+| `ROLDA_STATUS_HOST`, `ROLDA_STATUS_PORT` | `127.0.0.1`, `9100` | Worker `/healthz` and `/metrics` |
+| `ROLDA_POSTGRES_POOL_SIZE` | `5` | Most PostgreSQL connections per process |
+| `ROLDA_SHARD_COUNT`, `ROLDA_SHARD_INDEX` | `1`, `0` | Split traces between workers. The index can be `auto` (pod ordinal) |
 
 Alert channels. Each is optional and must be an http or https URL. These
 URLs are secrets, and Rolda never logs them.
@@ -133,11 +141,18 @@ on your own traces. Lower values catch more and raise more false alarms.
 | `ROLDA_MIN_SAMPLES` | 30 | History needed before an outlier rule runs |
 | `ROLDA_TOOL_LOOP_REPEATS` | 3 | Same tool and arguments this many times is a loop |
 
+## Kubernetes
+
+Kustomize manifests for the API, the sharded worker and a collector with a disk
+queue are in [`deploy/k8s`](deploy/k8s/README.md). They do not include the
+databases. See ADR 0020 for what was tested and what was not.
+
 ## Security
 
-- Every Compose port is bound to `127.0.0.1`. The OTLP receiver and the
-  databases have no network authentication, so keep them off public
-  networks.
+- Every Compose port is bound to `127.0.0.1`. The databases have no network
+  authentication, so keep them off public networks. The OTLP receiver can
+  require a bearer token (on by default in Kubernetes), but it travels in
+  clear text without TLS.
 - The API needs a bearer token and refuses to start without one. Put TLS in
   front of it before exposing it.
 - Trace content is untrusted input. It may contain prompt injection, so it

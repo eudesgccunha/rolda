@@ -1,10 +1,11 @@
 """Ports of the incidents feature."""
 
 from collections.abc import Sequence
+from datetime import timedelta
 from typing import Protocol
 
 from rolda.incidents.labels import Label, LabelSource
-from rolda.incidents.model import Incident, OrderKey
+from rolda.incidents.model import Incident, OrderKey, PendingDelivery
 
 
 class UnknownIncidentError(LookupError):
@@ -14,10 +15,14 @@ class UnknownIncidentError(LookupError):
 class IncidentStore(Protocol):
     """Port that persists incidents."""
 
-    async def save(self, incident: Incident) -> bool:
+    async def save(
+        self, incident: Incident, channels: Sequence[str] = ()
+    ) -> bool:
         """Store an incident unless ``(trace_id, rule)`` already exists.
 
-        Return True when the incident is new.
+        Return True when the incident is new. For a new incident the store
+        also queues one alert delivery per channel, in the same step, so an
+        incident is never saved without its alerts being queued.
         """
         ...
 
@@ -38,6 +43,26 @@ class IncidentStore(Protocol):
 
     async def for_trace(self, trace_id: str) -> Sequence[Incident]:
         """Return every incident of one trace."""
+        ...
+
+
+class AlertOutbox(Protocol):
+    """Port that remembers which alerts still have to be delivered."""
+
+    async def pending(
+        self, *, limit: int, max_attempts: int, backoff: timedelta
+    ) -> Sequence[PendingDelivery]:
+        """Return deliveries to retry.
+
+        A delivery that failed ``n`` times waits ``n * backoff`` before the
+        next try, and is dropped after ``max_attempts`` failures.
+        """
+        ...
+
+    async def mark_delivery(
+        self, trace_id: str, rule: str, channel: str, *, delivered: bool
+    ) -> None:
+        """Record the result of one attempt."""
         ...
 
 

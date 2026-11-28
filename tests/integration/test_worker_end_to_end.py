@@ -26,6 +26,7 @@ from rolda.entrypoints.worker import Worker, WorkerConfig
 from rolda.evals import build_cases
 from rolda.incidents import Label, LabelSource
 from rolda.judge import Verdict
+from rolda.traces import Shard
 
 pytestmark = pytest.mark.integration
 
@@ -155,3 +156,49 @@ def test_labeled_incident_exports_as_an_eval_case() -> None:
     assert case.expected == "incident"
     assert [s.status for s in case.spans] == ["error"]
     assert case.spans[0].operation == "tool"
+
+
+def test_spans_are_read_back_by_trace_id_in_a_batch() -> None:
+    source = ClickHouseSpanSource(load_settings(os.environ))
+    first, second = secrets.token_hex(16), secrets.token_hex(16)
+    _send_failing_span(first)
+    _send_failing_span(second)
+
+    deadline = time.monotonic() + 30
+    found: set[str] = set()
+    while time.monotonic() < deadline and found != {first, second}:
+        spans = asyncio.run(source.spans_for_traces([first, second, "0" * 32]))
+        found = {span.trace_id for span in spans}
+        time.sleep(1)
+
+    assert found == {first, second}
+
+
+def test_shards_split_the_spans_of_a_window_without_overlap() -> None:
+    settings = load_settings(os.environ)
+    ids = [secrets.token_hex(16) for _ in range(12)]
+    for trace_id in ids:
+        _send_failing_span(trace_id)
+    start = datetime.now(UTC) - timedelta(minutes=5)
+
+    def read(shard: Shard) -> set[str]:
+        source = ClickHouseSpanSource(settings, shard)
+        spans = asyncio.run(
+            source.spans_between(
+                start, datetime.now(UTC) + timedelta(minutes=1)
+            )
+        )
+        return {s.trace_id for s in spans if s.trace_id in ids}
+
+    deadline = time.monotonic() + 30
+    parts: list[set[str]] = []
+    while time.monotonic() < deadline:
+        parts = [read(Shard(3, i)) for i in range(3)]
+        if sum(len(p) for p in parts) == 12:
+            break
+        time.sleep(1)
+
+    assert sorted(set().union(*parts)) == sorted(ids)
+    assert sum(len(p) for p in parts) == 12  # no trace on two shards
+    for i, part in enumerate(parts):
+        assert all(Shard(3, i).owns(t) for t in part)

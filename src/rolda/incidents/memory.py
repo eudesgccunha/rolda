@@ -1,25 +1,80 @@
 """In-memory ``IncidentStore`` for tests and local runs."""
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
+from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 
 from rolda.incidents.labels import Label, LabelSource
-from rolda.incidents.model import Incident, OrderKey, agent_of, order_key
+from rolda.incidents.model import (
+    Incident,
+    OrderKey,
+    PendingDelivery,
+    agent_of,
+    order_key,
+)
 from rolda.incidents.ports import UnknownIncidentError
 
 
+def _utc_now() -> datetime:
+    return datetime.now(UTC)
+
+
+@dataclass(slots=True)
+class _Delivery:
+    attempts: int = 0
+    delivered: bool = False
+    last_attempt: datetime | None = None
+
+
 class InMemoryIncidentStore:
-    """Keep incidents in a dict keyed by ``(trace_id, rule)``."""
+    """Keep incidents in a dict keyed by ``(trace_id, rule)``.
 
-    def __init__(self) -> None:
+    It also keeps the alert outbox, like the PostgreSQL store does.
+    """
+
+    def __init__(self, clock: Callable[[], datetime] = _utc_now) -> None:
         self._items: dict[tuple[str, str], Incident] = {}
+        self._deliveries: dict[tuple[str, str, str], _Delivery] = {}
+        self._clock = clock
 
-    async def save(self, incident: Incident) -> bool:
-        """Store the incident if its key is new."""
+    async def save(
+        self, incident: Incident, channels: Sequence[str] = ()
+    ) -> bool:
+        """Store the incident if its key is new, and queue its alerts."""
         key = (incident.trace_id, incident.rule)
         if key in self._items:
             return False
         self._items[key] = incident
+        for channel in channels:
+            self._deliveries[(*key, channel)] = _Delivery()
         return True
+
+    async def pending(
+        self, *, limit: int, max_attempts: int, backoff: timedelta
+    ) -> Sequence[PendingDelivery]:
+        """Return deliveries that are due for another attempt."""
+        now = self._clock()
+        due: list[PendingDelivery] = []
+        for (trace_id, rule, channel), delivery in self._deliveries.items():
+            if delivery.delivered or delivery.attempts >= max_attempts:
+                continue
+            if (
+                delivery.last_attempt is not None
+                and now < delivery.last_attempt + backoff * delivery.attempts
+            ):
+                continue
+            incident = self._items[(trace_id, rule)]
+            due.append(PendingDelivery(incident, channel, delivery.attempts))
+        return due[:limit]
+
+    async def mark_delivery(
+        self, trace_id: str, rule: str, channel: str, *, delivered: bool
+    ) -> None:
+        """Record the result of one attempt."""
+        delivery = self._deliveries[(trace_id, rule, channel)]
+        delivery.attempts += 1
+        delivery.last_attempt = self._clock()
+        delivery.delivered = delivered
 
     def all(self) -> list[Incident]:
         """Return stored incidents in insertion order."""

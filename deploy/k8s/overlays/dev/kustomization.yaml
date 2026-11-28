@@ -1,0 +1,25 @@
+# Development and test only: it adds throwaway ClickHouse and PostgreSQL pods
+# so the whole system can run in a local kind cluster. Production points
+# rolda-config at real databases and uses the base alone.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: rolda
+
+resources:
+  - ../../base
+  - dev-databases.yaml
+
+images:
+  - name: rolda
+    newName: rolda
+    newTag: dev
+
+patches:
+  - target:
+      kind: Namespace
+      name: rolda
+    patch: |-
+      - op: replace
+        path: /metadata/labels/pod-security.kubernetes.io~1enforce
+        value: baseline

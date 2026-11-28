@@ -10,7 +10,7 @@ retention and indexes.
 
 ## Decision
 
-- The schema lives in `deploy/compose/sql/001_spans.sql` and is applied
+- The schema lives in `src/rolda/migrations/clickhouse/001_spans.sql` and is applied
   by the ClickHouse image on first start.
 - The exporter runs with `create_schema: false`.
 - Columns match the exporter v0.166.0 insert statement. The Collector and

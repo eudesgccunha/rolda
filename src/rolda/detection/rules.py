@@ -1,6 +1,5 @@
 """Deterministic detection rules (vela)."""
 
-import math
 from collections import Counter
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
@@ -9,13 +8,14 @@ from typing import Protocol
 from rolda.detection.baseline import (
     TIMED_OPERATIONS,
     Baseline,
+    log_scale,
     span_key,
     span_tokens,
     trace_duration_ns,
     trace_tokens,
 )
 from rolda.detection.model import Confidence, Finding
-from rolda.detection.stats import robust_z
+from rolda.detection.stats import Stats, robust_z_stats
 from rolda.traces import Operation, Span, SpanStatus, Trace
 
 
@@ -129,15 +129,15 @@ def _outlier(
     rule: str,
     trace: Trace,
     value: float | None,
-    samples: Mapping[str, tuple[float, ...]],
+    samples: Mapping[str, Stats],
     config: DetectionConfig,
     label: str,
 ) -> Sequence[Finding]:
     root: Span = trace.root
-    history = samples.get(root.agent or "", ())
-    if value is None or len(history) < config.min_samples:
+    stats = samples.get(root.agent or "")
+    if value is None or stats is None or stats.count < config.min_samples:
         return ()
-    score = robust_z(value, history)
+    score = robust_z_stats(value, stats)
     if score is None or score <= config.z_for(rule):
         return ()
     return (
@@ -191,10 +191,6 @@ class TokenOutlier:
         )
 
 
-def _log(value: float) -> float:
-    return math.log(max(value, 1.0))
-
-
 class SpanLatencyOutlier:
     """Flag the model or tool call that was much slower than usual.
 
@@ -216,12 +212,10 @@ class SpanLatencyOutlier:
         for span in trace.spans:
             if span.operation not in TIMED_OPERATIONS:
                 continue
-            history = baseline.span_durations.get(span_key(agent, span), ())
-            if len(history) < self._config.min_samples:
+            stats = baseline.span_durations.get(span_key(agent, span))
+            if stats is None or stats.count < self._config.min_samples:
                 continue
-            score = robust_z(
-                _log(float(span.duration_ns)), [_log(h) for h in history]
-            )
+            score = robust_z_stats(log_scale(float(span.duration_ns)), stats)
             if score is None or score <= self._config.z_for(self.name):
                 continue
             if worst is None or score > worst[0]:
@@ -264,10 +258,14 @@ class SpanTokenOutlier:
         worst: tuple[float, Span, int] | None = None
         for span in trace.spans:
             used = span_tokens(span)
-            history = baseline.span_tokens.get(span_key(agent, span), ())
-            if used is None or len(history) < self._config.min_samples:
+            stats = baseline.span_tokens.get(span_key(agent, span))
+            if (
+                used is None
+                or stats is None
+                or stats.count < self._config.min_samples
+            ):
                 continue
-            score = robust_z(_log(float(used)), [_log(h) for h in history])
+            score = robust_z_stats(log_scale(float(used)), stats)
             if score is None or score <= self._config.z_for(self.name):
                 continue
             if worst is None or score > worst[0]:

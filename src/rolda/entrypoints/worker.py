@@ -2,19 +2,25 @@
 
 import asyncio
 import logging
+import time
 from collections.abc import Awaitable, Callable, Iterator, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Protocol
 
 from rolda.alerts import Alert, AlertDeliveryError, Alerter
+from rolda.checkpoints import CheckpointStore, Leadership
 from rolda.detection import Baseline, Rule, suppress_redundant
+from rolda.detection.history import BaselineHistory
 from rolda.entrypoints.settings import Settings
 from rolda.incidents import (
+    AlertOutbox,
     Incident,
     IncidentStore,
     probable_cause,
 )
+from rolda.incidents.cause import hypothesis_for
+from rolda.observability import Metrics
 from rolda.traces import SpanSource, Trace, build_traces
 
 logger = logging.getLogger(__name__)
@@ -24,15 +30,23 @@ logger = logging.getLogger(__name__)
 class WorkerConfig:
     """Window settings.
 
-    ``lag`` re-reads the end of the previous window to catch late spans.
+    ``lag`` re-reads the end of the previous window to catch late spans. It
+    is also how long a trace may wait for its root span before it is judged
+    without it.
     ``baseline_span`` is the history used by the outlier rules.
-    ``baseline_refresh`` is how long a built baseline is reused before the
-    history is read again.
+    ``baseline_refresh`` is how long a built baseline is reused before it is
+    refreshed in the background. The history is read in slices of
+    ``baseline_slice``, and a refresh reads only the slices it lacks. A failed
+    alert is retried up to ``alert_max_attempts`` times, waiting
+    ``alert_backoff`` times the number of failures between tries.
     """
 
-    lag: timedelta = timedelta(minutes=2)
+    lag: timedelta = timedelta(minutes=10)
     baseline_span: timedelta = timedelta(days=7)
     baseline_refresh: timedelta = timedelta(hours=1)
+    baseline_slice: timedelta = timedelta(minutes=15)
+    alert_max_attempts: int = 5
+    alert_backoff: timedelta = timedelta(seconds=30)
 
 
 @dataclass(frozen=True, slots=True)
@@ -48,6 +62,60 @@ def _utc_now() -> datetime:
     return datetime.now(UTC)
 
 
+def register_worker_metrics(metrics: Metrics) -> None:
+    """Declare every metric the worker reports."""
+    metrics.describe(
+        "rolda_worker_windows_total",
+        "counter",
+        "Windows processed, by result.",
+    )
+    metrics.describe(
+        "rolda_worker_incidents_total", "counter", "New incidents created."
+    )
+    metrics.describe(
+        "rolda_worker_alerts_total",
+        "counter",
+        "Alert delivery attempts, by channel and result.",
+    )
+    metrics.describe(
+        "rolda_worker_is_leader",
+        "gauge",
+        "1 while this worker holds the leader lock, else 0.",
+    )
+    metrics.describe(
+        "rolda_worker_cursor_timestamp_seconds",
+        "gauge",
+        "End of the last processed window, as a Unix timestamp.",
+    )
+    metrics.describe(
+        "rolda_worker_window_duration_seconds",
+        "gauge",
+        "Seconds the last window took to process.",
+    )
+    metrics.describe(
+        "rolda_worker_baseline_build_seconds",
+        "gauge",
+        "Seconds the last baseline build took.",
+    )
+    metrics.describe(
+        "rolda_worker_baseline_traces",
+        "gauge",
+        "Historical traces in the last baseline.",
+    )
+    metrics.describe(
+        "rolda_worker_lag_seconds",
+        "gauge",
+        "Seconds between now and the end of the last processed window.",
+    )
+
+
+def _settled(trace: Trace, cutoff: datetime) -> bool:
+    """A trace is ready when its root arrived or it has been quiet long."""
+    if any(span.parent_span_id is None for span in trace.spans):
+        return True
+    return max(span.started_at for span in trace.spans) <= cutoff
+
+
 class Worker:
     """Run the rules over a window and store incidents idempotently."""
 
@@ -59,6 +127,8 @@ class Worker:
         config: WorkerConfig,
         clock: Callable[[], datetime] = _utc_now,
         alerters: Sequence[Alerter] = (),
+        outbox: AlertOutbox | None = None,
+        metrics: Metrics | None = None,
     ) -> None:
         self._source = source
         self._store = store
@@ -66,8 +136,17 @@ class Worker:
         self._config = config
         self._clock = clock
         self._alerters = alerters
-        self._baseline: Baseline | None = None
-        self._baseline_start: datetime | None = None
+        self._outbox = outbox
+        self._metrics = metrics
+        self._baseline = Baseline.from_samples([])
+        self._baseline_built_at: datetime | None = None
+        self._history = BaselineHistory(
+            source,
+            span=config.baseline_span,
+            slice_size=config.baseline_slice,
+            lag=config.lag,
+        )
+        self._refresh_task: asyncio.Task[None] | None = None
 
     async def run_window(self, start: datetime, end: datetime) -> WindowResult:
         """Process ``[start, end)`` plus the lag before it.
@@ -75,40 +154,77 @@ class Worker:
         Running the same window again creates no new incidents, because
         the store keeps one incident per trace and rule.
         """
+        began = time.monotonic()
+        await self._deliver_pending()
         lag = self._config.lag
-        spans = await self._source.spans_between(start - lag, end)
-        baseline = await self._baseline_for(start)
-        traces = build_traces(spans)
+        seen = await self._source.spans_between(start - lag, end)
+        # Judge whole traces: spans that started before this window count too.
+        trace_ids = sorted({span.trace_id for span in seen})
+        spans = await self._source.spans_for_traces(trace_ids)
+        baseline = self._baseline_for(start)
+        traces = [
+            trace
+            for trace in build_traces(spans)
+            if _settled(trace, end - lag)
+        ]
         findings = 0
         new = 0
         for trace in traces:
             for incident, hypothesis in self._incidents_for(trace, baseline):
                 findings += 1
-                if await self._store.save(incident):
+                if await self._store.save(incident, self._channel_names()):
                     new += 1
                     await self._notify(Alert(incident, hypothesis))
+        if self._metrics is not None:
+            self._metrics.set(
+                "rolda_worker_window_duration_seconds",
+                round(time.monotonic() - began, 3),
+            )
         return WindowResult(
             traces=len(traces), findings=findings, new_incidents=new
         )
 
-    async def _baseline_for(self, start: datetime) -> Baseline:
-        """Return the cached baseline, rebuilding it when it is stale."""
-        cached = self._baseline
-        built_at = self._baseline_start
-        if (
-            cached is not None
-            and built_at is not None
-            and timedelta(0)
-            <= start - built_at
-            < self._config.baseline_refresh
-        ):
-            return cached
-        history = await self._source.spans_between(
-            start - self._config.baseline_span, start - self._config.lag
+    def _baseline_for(self, start: datetime) -> Baseline:
+        """Return the current baseline, refreshing it in the background.
+
+        A window never waits for the history: the first one after a start
+        runs with an empty baseline, so outlier rules stay quiet until the
+        first refresh finishes. Errors and loops do not need it.
+        """
+        built_at = self._baseline_built_at
+        due = (
+            built_at is None
+            or start < built_at
+            or start - built_at >= self._config.baseline_refresh
         )
-        self._baseline = Baseline.from_traces(build_traces(history))
-        self._baseline_start = start
+        if due and self._refresh_task is None:
+            self._refresh_task = asyncio.create_task(self._refresh(start))
         return self._baseline
+
+    async def _refresh(self, start: datetime) -> None:
+        began = time.monotonic()
+        try:
+            self._baseline = await self._history.refresh(start)
+            self._baseline_built_at = start
+        except Exception:
+            logger.exception("baseline refresh failed; keeping the old one")
+        else:
+            if self._metrics is not None:
+                self._metrics.set(
+                    "rolda_worker_baseline_build_seconds",
+                    round(time.monotonic() - began, 3),
+                )
+                self._metrics.set(
+                    "rolda_worker_baseline_traces", self._history.trace_count
+                )
+        finally:
+            self._refresh_task = None
+
+    async def wait_for_baseline(self) -> None:
+        """Wait for a refresh in progress. For tests and shutdown."""
+        task = self._refresh_task
+        if task is not None:
+            await task
 
     def _incidents_for(
         self, trace: Trace, baseline: Baseline
@@ -134,15 +250,70 @@ class Worker:
             )
             yield incident, cause.hypothesis
 
+    def _channel_names(self) -> list[str]:
+        """Channels to queue for a new incident. None without an outbox."""
+        if self._outbox is None:
+            return []
+        return [alerter.name for alerter in self._alerters]
+
     async def _notify(self, alert: Alert) -> None:
         for alerter in self._alerters:
-            try:
-                await alerter.send(alert)
-            except AlertDeliveryError:
-                logger.exception(
-                    "alert delivery failed for trace %s",
-                    alert.incident.trace_id,
+            await self._send(alerter, alert)
+
+    async def _send(self, alerter: Alerter, alert: Alert) -> None:
+        incident = alert.incident
+        try:
+            await alerter.send(alert)
+        except AlertDeliveryError:
+            logger.exception(
+                "alert delivery failed for trace %s", incident.trace_id
+            )
+            delivered = False
+        else:
+            delivered = True
+        if self._metrics is not None:
+            self._metrics.inc(
+                "rolda_worker_alerts_total",
+                {
+                    "channel": alerter.name,
+                    "result": "ok" if delivered else "error",
+                },
+            )
+        if self._outbox is not None:
+            await self._outbox.mark_delivery(
+                incident.trace_id,
+                incident.rule,
+                alerter.name,
+                delivered=delivered,
+            )
+
+    async def _deliver_pending(self) -> None:
+        """Retry alerts that failed before, one channel at a time."""
+        if self._outbox is None:
+            return
+        pending = await self._outbox.pending(
+            limit=50,
+            max_attempts=self._config.alert_max_attempts,
+            backoff=self._config.alert_backoff,
+        )
+        by_name = {alerter.name: alerter for alerter in self._alerters}
+        for delivery in pending:
+            incident = delivery.incident
+            alerter = by_name.get(delivery.channel)
+            if alerter is None:
+                # The channel was removed from the configuration. Count the
+                # attempt so the delivery is dropped after the maximum.
+                await self._outbox.mark_delivery(
+                    incident.trace_id,
+                    incident.rule,
+                    delivery.channel,
+                    delivered=False,
                 )
+                continue
+            hypothesis = hypothesis_for(
+                incident.rule, incident.path, incident.evidence
+            )
+            await self._send(alerter, Alert(incident, hypothesis))
 
 
 class WindowRunner(Protocol):
@@ -159,35 +330,131 @@ async def serve(
     clock: Callable[[], datetime] = _utc_now,
     sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
     iterations: int | None = None,
+    *,
+    checkpoints: CheckpointStore | None = None,
+    leadership: Leadership | None = None,
+    stop: asyncio.Event | None = None,
+    name: str = "worker",
+    metrics: Metrics | None = None,
 ) -> None:
-    """Run contiguous windows forever, or ``iterations`` times.
+    """Run contiguous windows until ``stop`` is set or ``iterations`` pass.
 
-    A failed window is logged and retried from the same start, so an outage
-    of the databases or a bad window does not skip spans or end the process.
+    With a checkpoint store the worker resumes where the last one stopped. A
+    long outage is capped at ``max_catchup`` and the rest is processed in
+    chunks. With a ``leadership`` only the worker that holds the lock works.
+    A failed window is logged and retried from the same start.
     """
-    cursor: datetime | None = None
+    state = _LoopState(
+        worker, settings, clock, checkpoints, leadership, name, metrics
+    )
     count = 0
-    while iterations is None or count < iterations:
-        end = clock()
-        start = cursor or end - settings.window
-        try:
-            result = await worker.run_window(start, end)
-        except Exception:
-            logger.exception(
-                "window %s..%s failed; retrying",
-                start.isoformat(),
-                end.isoformat(),
-            )
-            cursor = start
+    try:
+        while (iterations is None or count < iterations) and not (
+            stop is not None and stop.is_set()
+        ):
+            count += 1
+            caught_up = await state.step()
+            if caught_up:
+                await sleep(settings.interval.total_seconds())
+    finally:
+        if leadership is not None:
+            await leadership.release()
+
+
+class _LoopState:
+    """What ``serve`` remembers between iterations."""
+
+    def __init__(
+        self,
+        worker: WindowRunner,
+        settings: Settings,
+        clock: Callable[[], datetime],
+        checkpoints: CheckpointStore | None,
+        leadership: Leadership | None,
+        name: str,
+        metrics: Metrics | None = None,
+    ) -> None:
+        self._worker = worker
+        self._settings = settings
+        self._clock = clock
+        self._checkpoints = checkpoints
+        self._leadership = leadership
+        self._name = name
+        self._metrics = metrics
+        self._cursor: datetime | None = None
+
+    async def _leads(self) -> bool:
+        if self._leadership is None or await self._leadership.is_held():
+            leads = True
         else:
-            logger.info(
-                "window %s..%s traces=%d findings=%d new_incidents=%d",
-                start.isoformat(),
-                end.isoformat(),
-                result.traces,
-                result.findings,
-                result.new_incidents,
+            self._cursor = None
+            leads = await self._leadership.try_acquire(self._name)
+            if not leads:
+                logger.info("standing by: another worker holds the lock")
+        if self._metrics is not None:
+            self._metrics.set("rolda_worker_is_leader", 1 if leads else 0)
+        return leads
+
+    def _report(self, outcome: str, cursor: datetime | None = None) -> None:
+        if self._metrics is None:
+            return
+        self._metrics.inc("rolda_worker_windows_total", {"result": outcome})
+        if cursor is not None:
+            now = self._clock()
+            self._metrics.set(
+                "rolda_worker_cursor_timestamp_seconds",
+                int(cursor.timestamp()),
             )
-            cursor = end
-        count += 1
-        await sleep(settings.interval.total_seconds())
+            self._metrics.set(
+                "rolda_worker_lag_seconds",
+                max(0, int((now - cursor).total_seconds())),
+            )
+
+    async def _start(self, end: datetime) -> datetime:
+        if self._cursor is None and self._checkpoints is not None:
+            self._cursor = await self._checkpoints.get(self._name)
+        start = self._cursor or end - self._settings.window
+        oldest = end - self._settings.max_catchup
+        if start < oldest:
+            logger.warning(
+                "skipping %s of unprocessed spans: the worker was down "
+                "longer than ROLDA_MAX_CATCHUP_SECONDS",
+                oldest - start,
+            )
+            start = oldest
+        return start
+
+    async def step(self) -> bool:
+        """Process one chunk. Return True when there is nothing left to do."""
+        if self._metrics is not None:
+            self._metrics.touch(self._clock())
+        try:
+            if not await self._leads():
+                return True
+            end = self._clock()
+            start = await self._start(end)
+            chunk_end = min(end, start + self._settings.chunk)
+            # A failure below keeps this start, so the same window is retried.
+            self._cursor = start
+            result = await self._worker.run_window(start, chunk_end)
+            if self._checkpoints is not None:
+                await self._checkpoints.set(self._name, chunk_end)
+            self._cursor = chunk_end
+        except Exception:
+            logger.exception("window failed; retrying from the same start")
+            self._report("error")
+            return True
+        self._report("ok", chunk_end)
+        if self._metrics is not None:
+            self._metrics.inc(
+                "rolda_worker_incidents_total", value=result.new_incidents
+            )
+        logger.info(
+            "window %s..%s traces=%d findings=%d new_incidents=%d",
+            start.isoformat(),
+            chunk_end.isoformat(),
+            result.traces,
+            result.findings,
+            result.new_incidents,
+        )
+        return chunk_end >= end

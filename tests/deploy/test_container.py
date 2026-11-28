@@ -82,7 +82,7 @@ def test_compose_has_no_literal_secret_values() -> None:
 def test_app_services_use_the_app_profile_and_a_hardened_runtime() -> None:
     text = COMPOSE.read_text(encoding="utf-8")
 
-    for service in ("worker", "api"):
+    for service in ("migrate", "worker", "api"):
         block = text.split(f"\n  {service}:\n", 1)[1].split("\n\n", 1)[0]
         assert 'profiles: ["app"]' in block, service
         assert "read_only: true" in block, service
@@ -98,3 +98,57 @@ def test_the_api_token_comes_from_the_environment_and_is_optional() -> None:
     text = COMPOSE.read_text(encoding="utf-8")
 
     assert "ROLDA_API_TOKEN: ${ROLDA_API_TOKEN:-}" in text
+
+
+K8S = ROOT / "deploy" / "k8s"
+
+
+def test_every_kubernetes_pod_turns_off_service_links() -> None:
+    # Kubernetes injects NAME_PORT=tcp://... for every Service. A Service named
+    # rolda-api collides with ROLDA_API_PORT and the API refuses to start.
+    for path in K8S.rglob("*.yaml"):
+        text = path.read_text(encoding="utf-8")
+        for kind in ("Deployment", "StatefulSet"):
+            documents = [
+                d for d in text.split("\n---") if f"kind: {kind}" in d
+            ]
+            for document in documents:
+                assert "enableServiceLinks: false" in document, path.name
+
+
+def test_no_kubernetes_manifest_holds_a_secret_value() -> None:
+    for path in K8S.rglob("*.yaml"):
+        text = path.read_text(encoding="utf-8")
+        if path.name == "secrets.example.yaml":
+            assert 'PASSWORD: ""' in text
+            continue
+        assert "kind: Secret" not in text, path.name
+
+
+AUTH_CONFIGS = [
+    K8S / "base" / "otelcol.yaml",
+    ROOT / "deploy" / "compose" / "collector.auth.yaml",
+]
+
+
+def test_the_authenticated_collector_configs_protect_both_protocols() -> None:
+    for path in AUTH_CONFIGS:
+        text = path.read_text(encoding="utf-8")
+
+        assert "bearertokenauth:" in text, path.name
+        assert text.count("authenticator: bearertokenauth") == 2, path.name
+        assert "token: ${env:ROLDA_OTLP_TOKEN}" in text, path.name
+        assert "extensions: [" in text
+        assert "bearertokenauth" in text.split("service:")[1], path.name
+
+
+def test_the_kubernetes_collector_gets_the_otlp_token_from_the_secret() -> (
+    None
+):
+    text = (K8S / "base" / "collector.yaml").read_text(encoding="utf-8")
+
+    assert "name: ROLDA_OTLP_TOKEN" in text
+    assert "key: ROLDA_OTLP_TOKEN" in text
+    assert 'ROLDA_OTLP_TOKEN: ""' in (
+        K8S / "base" / "secrets.example.yaml"
+    ).read_text(encoding="utf-8")

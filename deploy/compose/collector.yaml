@@ -16,7 +16,7 @@ exporters:
     database: rolda
     username: ${env:CLICKHOUSE_USER}
     password: ${env:CLICKHOUSE_PASSWORD}
-    # Schema is versioned in deploy/compose/sql, not created by the exporter.
+    # Schema is versioned in src/rolda/migrations/clickhouse, not created by the exporter.
     create_schema: false
     traces_table_name: otel_traces
 

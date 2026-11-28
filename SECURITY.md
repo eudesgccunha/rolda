@@ -27,8 +27,10 @@ yet.
   by alerts and the API without redaction. Evals and the judge never get it.
 - The API needs a bearer token and does not start without one. It is bound
   to `127.0.0.1` by default. Use TLS in front of it.
-- The OTLP receiver and the databases have no network authentication. The
-  Compose file binds their ports to `127.0.0.1`. Do not expose them.
+- The databases have no network authentication, and the OTLP receiver has
+  none unless you turn on the bearer token (always on in Kubernetes). The
+  Compose file binds their ports to `127.0.0.1`. Do not expose them. The token
+  is sent in clear text unless TLS protects the connection.
 - Webhook URLs and API keys are secrets. Rolda reads them from the
   environment and does not log them.
 

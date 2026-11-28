@@ -1,0 +1,14 @@
+# Settings that are not secret. The databases are NOT part of this base: point
+# these hosts at your ClickHouse and PostgreSQL (an operator or a managed
+# service). Credentials live in the Secret `rolda-secrets`, see secrets.example.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: rolda-config
+data:
+  ROLDA_CLICKHOUSE_HOST: clickhouse
+  ROLDA_POSTGRES_HOST: postgres
+  ROLDA_API_HOST: 0.0.0.0
+  ROLDA_STATUS_HOST: 0.0.0.0
+  ROLDA_SHARD_COUNT: "1"
+  ROLDA_POSTGRES_POOL_SIZE: "5"
